@@ -83,6 +83,8 @@ namespace CadenceClub.Core
             int score = 0;
             bool wantIce = state.Needed(GoalKind.Ice) > 0;
             bool wantCrates = state.Needed(GoalKind.Crates) > 0;
+            bool wantOil = state.Needed(GoalKind.Oil) > 0;
+            bool wantTrophy = state.Needed(GoalKind.Trophies) > 0;
             var crates = new HashSet<Cell>();
             foreach (var g in groups)
             {
@@ -91,13 +93,16 @@ namespace CadenceClub.Core
                     var cover = board.CoverAt(c);
                     score += wantIce && cover.ice ? 5 : 0;
                     score += cover.chain ? 2 : 0; // frees a locked piece
-                    if (wantCrates)
+                    if (wantCrates || wantOil)
                     {
                         foreach (var n in new[] { new Cell(c.x + 1, c.y), new Cell(c.x - 1, c.y), new Cell(c.x, c.y + 1), new Cell(c.x, c.y - 1) })
                         {
-                            score += board.HasCrate(n) && crates.Add(n) ? 5 : 0;
+                            bool wanted = board.HasOil(n) ? wantOil : wantCrates;
+                            score += wanted && board.HasCrate(n) && crates.Add(n) ? 5 : 0;
                         }
                     }
+
+                    score += wantTrophy && TrophyAbove(board, c) ? 6 : 0; // the trophy falls a row
                 }
 
                 score += g.cells.Count + 3 * Math.Min(g.cells.Count, state.NeededOf(g.color));
@@ -120,6 +125,19 @@ namespace CadenceClub.Core
             // Matches low on the board shake more pieces loose, so they cascade more.
             score += (board.Height - Math.Min(a.y, b.y)) / 3;
             return score;
+        }
+
+        private static bool TrophyAbove(Board board, Cell c)
+        {
+            for (int y = c.y + 1; y < board.Height; y++)
+            {
+                if (board[c.x, y].trophy)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 

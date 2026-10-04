@@ -21,27 +21,33 @@ namespace CadenceClub.Core
         public int color;
         public Special special;
 
+        /// <summary>A trophy (goal item): no colour, never matches or blasts away; it falls, and leaves at the bottom.</summary>
+        public bool trophy;
+
         public static Piece Empty => new Piece { color = NoColor, special = Special.None };
+
+        public static Piece Trophy => new Piece { color = NoColor, special = Special.None, trophy = true };
 
         public static Piece Normal(int color) => new Piece { color = color, special = Special.None };
 
         public static Piece Make(int color, Special special) =>
             new Piece { color = special == Special.Disco ? NoColor : color, special = special };
 
-        public bool IsEmpty => color == NoColor && special == Special.None;
+        public bool IsEmpty => color == NoColor && special == Special.None && !trophy;
 
         public bool IsSpecial => special != Special.None;
 
         /// <summary>Takes part in colour matches: anything with a colour, including coloured specials.</summary>
         public bool CanMatch => color >= 0;
 
-        public bool Equals(Piece other) => color == other.color && special == other.special;
+        public bool Equals(Piece other) => color == other.color && special == other.special && trophy == other.trophy;
 
         public override bool Equals(object obj) => obj is Piece other && Equals(other);
 
-        public override int GetHashCode() => (color + 1) * 8 + (int)special;
+        public override int GetHashCode() => (color + 1) * 8 + (int)special + (trophy ? 1000 : 0);
 
-        public override string ToString() => IsEmpty ? "." : special == Special.None ? ((char)('A' + color)).ToString() : $"{special}({color})";
+        public override string ToString() =>
+            trophy ? "T" : IsEmpty ? "." : special == Special.None ? ((char)('A' + color)).ToString() : $"{special}({color})";
     }
 
     public readonly struct Cell : IEquatable<Cell>
@@ -69,7 +75,7 @@ namespace CadenceClub.Core
     /// <summary>
     /// What lies on a cell besides its piece. A crate fills the cell (no piece) and takes 1–2 hits; ice lies under the
     /// piece and breaks when that piece is cleared; a chain locks the piece (no swapping, no falling) until a clear
-    /// breaks it, and the piece stays.
+    /// breaks it, and the piece stays. Oil is a one-hit crate that spreads (see <see cref="LevelState"/>).
     /// </summary>
     public struct Cover : IEquatable<Cover>
     {
@@ -79,13 +85,16 @@ namespace CadenceClub.Core
         public bool ice;
         public bool chain;
 
+        /// <summary>The crate here is an oil spill (always one hit).</summary>
+        public bool oil;
+
         public bool IsEmpty => crate == 0 && !ice && !chain;
 
-        public bool Equals(Cover other) => crate == other.crate && ice == other.ice && chain == other.chain;
+        public bool Equals(Cover other) => crate == other.crate && ice == other.ice && chain == other.chain && oil == other.oil;
 
         public override bool Equals(object obj) => obj is Cover other && Equals(other);
 
-        public override int GetHashCode() => crate * 4 + (ice ? 2 : 0) + (chain ? 1 : 0);
+        public override int GetHashCode() => crate * 8 + (oil ? 4 : 0) + (ice ? 2 : 0) + (chain ? 1 : 0);
     }
 
     /// <summary>
@@ -164,6 +173,8 @@ namespace CadenceClub.Core
 
         public bool HasCrate(Cell c) => HasCrate(c.x, c.y);
 
+        public bool HasOil(Cell c) => CoverAt(c).oil;
+
         public bool IsLocked(Cell c) => CoverAt(c).chain;
 
         /// <summary>Holds its place: a crate, or a chained piece. Pieces land on it and never pass through.</summary>
@@ -175,7 +186,7 @@ namespace CadenceClub.Core
 
         /// <summary>
         /// Lays covers from rows written top to bottom (the level shape): '1'/'2' crate with that many hits,
-        /// 'i' ice, 'l' chain; anything else adds nothing. Crate cells lose their piece.
+        /// 'o' oil, 'i' ice, 'l' chain; anything else adds nothing. Crate and oil cells lose their piece.
         /// </summary>
         public void ApplyCovers(string[] rowsTopToBottom)
         {
@@ -191,9 +202,10 @@ namespace CadenceClub.Core
                     }
 
                     var cover = CoverAt(x, y);
-                    if (c == '1' || c == '2')
+                    if (c == '1' || c == '2' || c == 'o')
                     {
-                        cover.crate = c - '0';
+                        cover.crate = c == 'o' ? 1 : c - '0';
+                        cover.oil = c == 'o';
                         _pieces[y * Width + x] = Piece.Empty;
                     }
                     else if (c == 'i')
@@ -236,7 +248,7 @@ namespace CadenceClub.Core
         }
 
         /// <summary>
-        /// Builds a board from rows written top to bottom: 'A'–'F' colours, '@' disco, '.' empty, '#' hole.
+        /// Builds a board from rows written top to bottom: 'A'–'F' colours, '@' disco, 'T' trophy, '.' empty, '#' hole.
         /// Coloured specials are set afterwards through the indexer.
         /// </summary>
         public static Board Parse(params string[] rowsTopToBottom)
@@ -273,13 +285,17 @@ namespace CadenceClub.Core
                     {
                         board[x, y] = Piece.Make(Piece.NoColor, Special.Disco);
                     }
+                    else if (c == 'T')
+                    {
+                        board[x, y] = Piece.Trophy;
+                    }
                 }
             }
 
             return board;
         }
 
-        /// <summary>Rows top to bottom: colour letters, '*' coloured special, '@' disco, '.' empty, '#' hole, '1'/'2' crate.</summary>
+        /// <summary>Rows top to bottom: colour letters, '*' coloured special, '@' disco, 'T' trophy, '.' empty, '#' hole, '1'/'2' crate, 'o' oil.</summary>
         public string[] ToRows()
         {
             var rows = new string[Height];
@@ -292,7 +308,9 @@ namespace CadenceClub.Core
                 {
                     var p = this[x, y];
                     sb.Append(!IsPlayable(x, y) ? '#'
+                        : CoverAt(x, y).oil ? 'o'
                         : HasCrate(x, y) ? (char)('0' + CoverAt(x, y).crate)
+                        : p.trophy ? 'T'
                         : p.IsEmpty ? '.'
                         : p.special == Special.Disco ? '@'
                         : p.special != Special.None ? '*'

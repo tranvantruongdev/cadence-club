@@ -70,6 +70,116 @@ namespace CadenceClub.Core.Tests
             Assert.IsTrue(board.IsFull());
         }
 
+        private static int Count(Board board, System.Func<Cell, bool> what) =>
+            Enumerable.Range(0, board.Height).Sum(y => Enumerable.Range(0, board.Width).Count(x => what(new Cell(x, y))));
+
+        [Test]
+        public void A_match_next_to_oil_clears_it_and_the_cell_refills()
+        {
+            var board = Board.Parse(Rows);
+            board.ApplyCovers(new[] { "....", ".o..", "...." });
+            Assert.IsTrue(board.HasOil(new Cell(1, 1)) && board[1, 1].IsEmpty, "oil fills its cell");
+            var first = Move(board, out _);
+            Assert.IsTrue(first.Any(e => e.type == BoardEventType.OilCleared && e.a.Equals(new Cell(1, 1))));
+            Assert.IsFalse(board.HasCrate(new Cell(1, 1)) || board.HasOil(new Cell(1, 1)));
+            Assert.IsTrue(board.IsFull());
+        }
+
+        [Test]
+        public void Oil_spreads_one_cell_after_each_move_that_clears_none()
+        {
+            var def = new LevelDef
+            {
+                shape = new[] { "o.....", "......", "......", "......", "......", ".....o" },
+                colors = 4,
+                moves = 25,
+                goals = new[] { LevelDef.ClearOil(2) },
+            };
+            CollectionAssert.IsEmpty(def.Validate());
+            var state = new LevelState(def, 3);
+            var bot = new Bot(BotKind.Random, new SeededRandom(4));
+            int spreads = 0;
+            while (state.Outcome == LevelOutcome.Playing)
+            {
+                int before = Count(state.Board, state.Board.HasOil);
+                var events = new List<BoardEvent>();
+                var move = bot.Choose(state).Value;
+                Assert.IsTrue(state.TryMove(move.a, move.b, events));
+                int cleared = events.Count(e => e.type == BoardEventType.OilCleared);
+                int spread = events.Count(e => e.type == BoardEventType.OilSpread);
+                Assert.AreEqual(before - cleared + spread, Count(state.Board, state.Board.HasOil), "oil = before − cleared + spread");
+                Assert.LessOrEqual(spread, cleared > 0 || state.Outcome != LevelOutcome.Playing ? 0 : 1, "one cell, and only after a move that cleared none");
+                Assert.IsTrue(MoveFinder.HasMove(state.Board), "a spread never leaves the board stuck");
+                spreads += spread;
+            }
+
+            Assert.Greater(spreads, 0, "a random player leaves oil alone long enough for it to spread");
+        }
+
+        [Test]
+        public void An_oil_goal_cannot_ask_for_more_oil_than_the_board_starts_with()
+        {
+            var def = new LevelDef { shape = new[] { "o...", "....", "....", "...." }, goals = new[] { LevelDef.ClearOil(2) } };
+            CollectionAssert.Contains(def.Validate(), "goal 1 wants 2 oil; the board starts with 1");
+        }
+
+        [Test]
+        public void A_trophy_shrugs_off_a_rocket_falls_and_leaves_at_the_bottom()
+        {
+            var board = Board.Parse("ATBC", "CDAB", "DBCA");
+            board[0, 2] = Piece.Make(0, Special.RocketH);
+            var resolver = new MoveResolver(4, new SeededRandom(2));
+            var events = new List<BoardEvent>();
+            resolver.ResolveCells(board, new[] { new Cell(0, 2) }, events);
+            Assert.IsTrue(events.Any(e => e.type == BoardEventType.Cleared && e.a.Equals(new Cell(2, 2))), "the rocket cleared its row");
+            Assert.IsFalse(events.Any(e => e.type == BoardEventType.Cleared && e.piece.trophy), "blasts pass over a trophy");
+
+            var trophies = Enumerable.Range(0, 3).SelectMany(y => Enumerable.Range(0, 4).Select(x => new Cell(x, y))).Where(c => board[c].trophy).ToList();
+            Assert.AreEqual(1, trophies.Count + events.Count(e => e.type == BoardEventType.TrophyCollected), "still there, or already gone through the bottom");
+            if (trophies.Count == 1)
+            {
+                var at = trophies[0];
+                events.Clear();
+                resolver.ResolveCells(board, Enumerable.Range(0, at.y).Select(y => new Cell(at.x, y)), events);
+                var collected = events.Where(e => e.type == BoardEventType.TrophyCollected).ToList();
+                Assert.AreEqual(1, collected.Count, "with the cells below it cleared, it falls to the bottom and leaves");
+                Assert.AreEqual(new Cell(at.x, 0), collected[0].a);
+            }
+
+            Assert.AreEqual(0, Count(board, c => board[c].trophy));
+            Assert.IsTrue(board.IsFull(), "its column refilled");
+        }
+
+        [Test]
+        public void A_disco_cannot_take_a_trophy()
+        {
+            var board = Board.Parse("ABC", "T@B");
+            Assert.IsFalse(MoveFinder.IsValid(board, new Cell(0, 0), new Cell(1, 0)));
+            Assert.IsFalse(new MoveResolver(3, new SeededRandom(1)).TryMove(board, new Cell(0, 0), new Cell(1, 0), new List<BoardEvent>()));
+        }
+
+        [Test]
+        public void Trophies_drop_one_at_a_time_until_the_goal_is_met()
+        {
+            var state = new LevelState(LevelDef.Rectangle(6, 6, 4, 80, LevelDef.BringTrophies(2)), 2);
+            Assert.AreEqual(1, Count(state.Board, c => state.Board[c].trophy), "the level starts with one");
+            Assert.IsTrue(Enumerable.Range(0, 6).Any(x => state.Board[x, 5].trophy), "at the top");
+            var bot = new Bot(BotKind.Greedy, new SeededRandom(1));
+            int drops = 0;
+            while (state.Outcome == LevelOutcome.Playing)
+            {
+                var events = new List<BoardEvent>();
+                var move = bot.Choose(state).Value;
+                state.TryMove(move.a, move.b, events);
+                drops += events.Count(e => e.type == BoardEventType.TrophyDropped);
+                int onBoard = Count(state.Board, c => state.Board[c].trophy);
+                Assert.AreEqual(state.Outcome == LevelOutcome.Playing && state.Remaining(0) > 0 ? 1 : 0, onBoard, "one trophy while more are needed");
+            }
+
+            Assert.AreEqual(LevelOutcome.Won, state.Outcome, "the greedy bot brings two trophies down in 80 moves");
+            Assert.AreEqual(1, drops, "the second one dropped in after the first left");
+        }
+
         [Test]
         public void Ice_breaks_only_under_a_cleared_piece()
         {

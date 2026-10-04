@@ -18,12 +18,12 @@ namespace CadenceClub.EditorTools
     {
         private const float CellSize = 34f;
 
-        private static readonly char[] Brushes = { '.', '#', '1', '2', 'i', 'l' };
-        private static readonly string[] BrushNames = { "Cell", "Hole", "Crate ×1", "Crate ×2", "Ice", "Chain" };
+        private static readonly char[] Brushes = { '.', '#', '1', '2', 'o', 'i', 'l' };
+        private static readonly string[] BrushNames = { "Cell", "Hole", "Crate ×1", "Crate ×2", "Oil", "Ice", "Chain" };
         private static readonly Color[] BrushColors =
         {
             new Color(0.30f, 0.36f, 0.45f), new Color(0.08f, 0.08f, 0.10f), new Color(0.85f, 0.60f, 0.35f),
-            new Color(0.55f, 0.33f, 0.16f), new Color(0.70f, 0.88f, 1.00f), new Color(0.62f, 0.66f, 0.72f),
+            new Color(0.55f, 0.33f, 0.16f), new Color(0.23f, 0.18f, 0.33f), new Color(0.70f, 0.88f, 1.00f), new Color(0.62f, 0.66f, 0.72f),
         };
 
         private int _number = 1;

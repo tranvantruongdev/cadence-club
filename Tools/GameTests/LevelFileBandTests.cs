@@ -78,7 +78,12 @@ namespace CadenceClub.Core.Tests
             var band = LevelBands.For(number);
             var result = LevelSimulator.Run(def, 200, BotKind.Greedy);
             TestContext.WriteLine($"level {number}, {def.moves} moves: {result}");
-            Assert.That(result.WinRate, Is.InRange(band.min, band.max), $"level {number}: target {band.min:P0}–{band.max:P0}");
+            if (result.WinRate < band.min || result.WinRate > band.max)
+            {
+                int fit = LevelSimulator.FitMoves(LevelSimulator.MovesToWin(def, 200, BotKind.Greedy), band);
+                Assert.Fail($"level {number}: {result.WinRate:P0} won with {def.moves} moves, target {band.min:P0}–{band.max:P0}; " +
+                            (fit > 0 ? $"{fit} moves fits" : "no move limit fits: change the board or goals"));
+            }
         }
     }
 }

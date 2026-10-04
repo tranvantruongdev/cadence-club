@@ -15,6 +15,12 @@ namespace CadenceClub.Core
 
         /// <summary>Break <c>count</c> ice tiles.</summary>
         Ice,
+
+        /// <summary>Clear <c>count</c> oil (it spreads after every move that clears none).</summary>
+        Oil,
+
+        /// <summary>Bring <c>count</c> trophies down to the bottom; one drops in at the top while more are needed.</summary>
+        Trophies,
     }
 
     [Serializable]
@@ -31,7 +37,7 @@ namespace CadenceClub.Core
     {
         public int id;
 
-        /// <summary>Rows top to bottom: '.' playable, '#' hole, '1'/'2' crate (hits), 'i' ice, 'l' chained piece.</summary>
+        /// <summary>Rows top to bottom: '.' playable, '#' hole, '1'/'2' crate (hits), 'o' oil, 'i' ice, 'l' chained piece.</summary>
         public string[] shape;
 
         public int colors = 4;
@@ -75,6 +81,10 @@ namespace CadenceClub.Core
 
         public static Goal ClearIce(int count) => new Goal { kind = GoalKind.Ice, color = Piece.NoColor, count = count };
 
+        public static Goal ClearOil(int count) => new Goal { kind = GoalKind.Oil, color = Piece.NoColor, count = count };
+
+        public static Goal BringTrophies(int count) => new Goal { kind = GoalKind.Trophies, color = Piece.NoColor, count = count };
+
         /// <summary>Shallow copy: the shape and goals arrays are shared (nothing mutates them).</summary>
         public LevelDef Clone() => (LevelDef)MemberwiseClone();
 
@@ -91,6 +101,7 @@ namespace CadenceClub.Core
             int cells = 0;
             int ice = 0;
             int crates = 0;
+            int oil = 0;
             for (int row = 0; row < shape.Length; row++)
             {
                 if (shape[row].Length != Width)
@@ -100,14 +111,15 @@ namespace CadenceClub.Core
 
                 foreach (char c in shape[row])
                 {
-                    if ("#.12il".IndexOf(c) < 0)
+                    if ("#.12oil".IndexOf(c) < 0)
                     {
-                        problems.Add($"row {row + 1} has '{c}' (use # . 1 2 i l)");
+                        problems.Add($"row {row + 1} has '{c}' (use # . 1 2 o i l)");
                     }
 
                     cells += c == '.' || c == 'i' || c == 'l' ? 1 : 0;
                     ice += c == 'i' ? 1 : 0;
                     crates += c == '1' || c == '2' ? 1 : 0;
+                    oil += c == 'o' ? 1 : 0;
                 }
             }
 
@@ -151,6 +163,11 @@ namespace CadenceClub.Core
                 {
                     problems.Add($"goal {g + 1} wants {goal.count} crates; the board has {crates}");
                 }
+                else if (goal.kind == GoalKind.Oil && goal.count > oil)
+                {
+                    // Oil can grow, but a player who clears it all must have met the goal.
+                    problems.Add($"goal {g + 1} wants {goal.count} oil; the board starts with {oil}");
+                }
             }
 
             return problems;
@@ -192,6 +209,12 @@ namespace CadenceClub.Core
                     var kind = rocket ? (i % 2 == 0 ? Special.RocketH : Special.RocketV) : booster.special;
                     Board[cells[i]] = Piece.Make(Board[cells[i]].color, kind);
                 }
+            }
+
+            DropTrophy(null);
+            if (!MoveFinder.HasMove(Board))
+            {
+                Shuffler.Shuffle(Board, _rng, def.colors);
             }
         }
 
@@ -313,7 +336,124 @@ namespace CadenceClub.Core
                 Outcome = LevelOutcome.Lost;
             }
 
+            AfterTurn(events, start, spreadOil: true);
             return true;
+        }
+
+        /// <summary>
+        /// The board's own turn, as one extra step: oil spreads onto a neighbouring piece unless the move cleared some
+        /// (a power isn't a turn, so it never spreads), and a trophy drops in at the top while the goal needs one and none
+        /// is on the board.
+        /// </summary>
+        private void AfterTurn(List<BoardEvent> events, int start, bool spreadOil)
+        {
+            if (Outcome != LevelOutcome.Playing)
+            {
+                return;
+            }
+
+            bool oilCleared = false;
+            for (int i = start; i < events.Count; i++)
+            {
+                oilCleared |= events[i].type == BoardEventType.OilCleared;
+            }
+
+            var extra = new List<BoardEvent>();
+            if (spreadOil && !oilCleared)
+            {
+                SpreadOil(extra);
+            }
+
+            DropTrophy(extra);
+            if (extra.Count == 0)
+            {
+                return;
+            }
+
+            events.Add(new BoardEvent { type = BoardEventType.StepStarted, value = 0 });
+            events.AddRange(extra);
+            if (!MoveFinder.HasMove(Board))
+            {
+                Shuffler.Shuffle(Board, _rng, Def.colors);
+                events.Add(new BoardEvent { type = BoardEventType.Shuffled });
+            }
+        }
+
+        /// <summary>One oil cell, picked at random, covers a plain neighbouring piece.</summary>
+        private void SpreadOil(List<BoardEvent> events)
+        {
+            var options = new List<(Cell from, Cell to)>();
+            for (int y = 0; y < Board.Height; y++)
+            {
+                for (int x = 0; x < Board.Width; x++)
+                {
+                    var from = new Cell(x, y);
+                    if (!Board.HasOil(from))
+                    {
+                        continue;
+                    }
+
+                    foreach (var to in new[] { new Cell(x + 1, y), new Cell(x - 1, y), new Cell(x, y + 1), new Cell(x, y - 1) })
+                    {
+                        if (Board.IsPlayable(to) && Board.CoverAt(to).IsEmpty && Board[to].CanMatch && !Board[to].IsSpecial)
+                        {
+                            options.Add((from, to));
+                        }
+                    }
+                }
+            }
+
+            if (options.Count == 0)
+            {
+                return;
+            }
+
+            var (source, target) = options[_rng.Range(0, options.Count)];
+            var covered = Board[target];
+            Board[target] = Piece.Empty;
+            Board.SetCover(target, new Cover { crate = 1, oil = true });
+            events.Add(new BoardEvent { type = BoardEventType.OilSpread, a = source, b = target, piece = covered });
+        }
+
+        /// <summary>While the trophy goal needs more and none is on the board, one replaces a plain piece in a top cell.</summary>
+        private void DropTrophy(List<BoardEvent> events)
+        {
+            if (Needed(GoalKind.Trophies) == 0)
+            {
+                return;
+            }
+
+            var tops = new List<Cell>();
+            for (int x = 0; x < Board.Width; x++)
+            {
+                for (int y = Board.Height - 1; y >= 0; y--)
+                {
+                    var cell = new Cell(x, y);
+                    if (Board[cell].trophy)
+                    {
+                        return; // one at a time
+                    }
+
+                    if (!Board.IsPlayable(cell))
+                    {
+                        continue;
+                    }
+
+                    if (Board.CoverAt(cell).IsEmpty && Board[cell].CanMatch && !Board[cell].IsSpecial && tops.Count(c => c.x == x) == 0)
+                    {
+                        tops.Add(cell);
+                    }
+                }
+            }
+
+            if (tops.Count == 0)
+            {
+                return;
+            }
+
+            var at = tops[_rng.Range(0, tops.Count)];
+            Board[at] = Piece.Trophy;
+            events?.Add(new BoardEvent { type = BoardEventType.TrophyDropped, a = at, piece = Piece.Trophy });
         }
 
         /// <summary>Fires a full rider's power (no move used) and empties their charge. False if not ready or the level is over.</summary>
@@ -350,6 +490,7 @@ namespace CadenceClub.Core
                 Outcome = LevelOutcome.Won;
             }
 
+            AfterTurn(events, start, spreadOil: false);
             return true;
         }
 
@@ -377,6 +518,14 @@ namespace CadenceClub.Core
                 else if (e.type == BoardEventType.IceBroken)
                 {
                     Count(GoalKind.Ice, Piece.NoColor);
+                }
+                else if (e.type == BoardEventType.OilCleared)
+                {
+                    Count(GoalKind.Oil, Piece.NoColor);
+                }
+                else if (e.type == BoardEventType.TrophyCollected)
+                {
+                    Count(GoalKind.Trophies, Piece.NoColor);
                 }
             }
         }

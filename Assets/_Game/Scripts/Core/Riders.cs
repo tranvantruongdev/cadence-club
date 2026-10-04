@@ -46,7 +46,7 @@ namespace CadenceClub.Core
             var board = state.Board;
             var cells = All(board).ToList();
             var obstacles = cells.Where(c => !board.CoverAt(c).IsEmpty).ToList();
-            var pieces = cells.Where(c => board.CoverAt(c).IsEmpty && !board[c].IsEmpty).ToList();
+            var pieces = cells.Where(c => board.CoverAt(c).IsEmpty && !board[c].IsEmpty && !board[c].trophy).ToList();
             rng.Shuffle(obstacles);
             rng.Shuffle(pieces);
             return obstacles.Concat(pieces).Take(count).ToList();
@@ -70,6 +70,11 @@ namespace CadenceClub.Core
             }
 
             var cover = board.CoverAt(c);
+            if (cover.oil)
+            {
+                return state.Needed(GoalKind.Oil) > 0 ? 3 : 2; // oil left alone spreads
+            }
+
             if (cover.crate > 0)
             {
                 return state.Needed(GoalKind.Crates) > 0 ? 3 : 1;

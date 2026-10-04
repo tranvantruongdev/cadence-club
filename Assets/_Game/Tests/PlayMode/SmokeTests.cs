@@ -268,6 +268,17 @@ namespace CadenceClub.PlayModeTests
                 yield return PlayToEnd(controller, "obstacles");
                 Assert.AreEqual(0, drifts, "obstacles: the board view should match the Core board after every move");
 
+                // Level 22 (oil spreads) and level 26 (trophies drop in and leave at the bottom), played to the end.
+                foreach (var (level, name) in new[] { (22, "oil"), (26, "trophies") })
+                {
+                    Levels.Override = level;
+                    yield return EnterGame();
+                    controller = Object.FindAnyObjectByType<LevelController>();
+                    Capture($"{name}-start");
+                    yield return PlayToEnd(controller, name);
+                    Assert.AreEqual(0, drifts, $"{name}: the board view should match the Core board after every move");
+                }
+
                 yield return Services.Get<GameFlow>().GoToAsync(AppState.Title).ToCoroutine(); // the whole transition: GameFlow ignores requests mid-fade
                 yield return WaitForScene("Title", 20f);
                 yield return new WaitForSeconds(0.6f);

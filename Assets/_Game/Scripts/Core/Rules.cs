@@ -41,6 +41,18 @@ namespace CadenceClub.Core
 
         /// <summary>The chain at a broke; its piece stays, now free.</summary>
         ChainBroken,
+
+        /// <summary>The oil at a was cleared (one hit).</summary>
+        OilCleared,
+
+        /// <summary>Oil spread from a onto b, covering the piece there (piece = what it covered).</summary>
+        OilSpread,
+
+        /// <summary>A trophy appeared at a, in place of the piece there (piece = the trophy).</summary>
+        TrophyDropped,
+
+        /// <summary>The trophy at a reached the bottom and left the board (piece = the trophy).</summary>
+        TrophyCollected,
     }
 
     public struct BoardEvent
@@ -243,6 +255,11 @@ namespace CadenceClub.Core
 
             var pa = board[a];
             var pb = board[b];
+            if (DiscoOnTrophy(pa, pb))
+            {
+                return false; // a trophy has no colour for the disco to take
+            }
+
             Swap(board, a, b);
             events.Add(new BoardEvent { type = BoardEventType.Swapped, a = a, b = b });
 
@@ -348,6 +365,8 @@ namespace CadenceClub.Core
 
         private static bool IsRocket(Special s) => s == Special.RocketH || s == Special.RocketV;
 
+        internal static bool DiscoOnTrophy(Piece pa, Piece pb) => (pa.special == Special.Disco && pb.trophy) || (pb.special == Special.Disco && pa.trophy);
+
         /// <summary>Rows and columns through the centre, (2·half + 1) wide.</summary>
         private static void AddCross(Board board, List<Cell> clears, Cell at, int half)
         {
@@ -410,11 +429,15 @@ namespace CadenceClub.Core
             }
         }
 
-        /// <summary>Clears the given cells and creations, then cascades until stable.</summary>
+        /// <summary>
+        /// Clears the given cells and creations, then cascades until stable. A trophy that has reached the bottom of its
+        /// column leaves at the start of the next step, with that step's matches, so each step settles once.
+        /// </summary>
         private void Resolve(Board board, List<Cell> clears, List<MatchGroup> creations, HashSet<Cell> noBlast, List<BoardEvent> events)
         {
             for (int step = 0; step < MaxSteps; step++)
             {
+                var trophies = BottomTrophies(board);
                 if (step > 0)
                 {
                     clears.Clear();
@@ -423,12 +446,18 @@ namespace CadenceClub.Core
                     Collect(MatchFinder.Find(board), clears, creations);
                 }
 
-                if (clears.Count == 0)
+                if (clears.Count == 0 && trophies.Count == 0)
                 {
                     break;
                 }
 
                 events.Add(new BoardEvent { type = BoardEventType.StepStarted, value = step });
+                foreach (var cell in trophies)
+                {
+                    board[cell] = Piece.Empty;
+                    events.Add(new BoardEvent { type = BoardEventType.TrophyCollected, a = cell, piece = Piece.Trophy });
+                }
+
                 ClearAndActivate(board, clears, creations, noBlast, events);
                 Gravity.Settle(board, _rng, _colors, events);
             }
@@ -438,6 +467,29 @@ namespace CadenceClub.Core
                 Shuffler.Shuffle(board, _rng, _colors);
                 events.Add(new BoardEvent { type = BoardEventType.Shuffled });
             }
+        }
+
+        /// <summary>Trophies with no playable cell below them in their column: they have arrived.</summary>
+        public static List<Cell> BottomTrophies(Board board)
+        {
+            var cells = new List<Cell>();
+            for (int x = 0; x < board.Width; x++)
+            {
+                for (int y = 0; y < board.Height; y++)
+                {
+                    if (board.IsPlayable(x, y))
+                    {
+                        if (board[x, y].trophy)
+                        {
+                            cells.Add(new Cell(x, y));
+                        }
+
+                        break; // only the lowest playable cell counts
+                    }
+                }
+            }
+
+            return cells;
         }
 
         private static void Collect(List<MatchGroup> groups, List<Cell> clears, List<MatchGroup> creations)
@@ -473,9 +525,9 @@ namespace CadenceClub.Core
                 }
 
                 var piece = board[cell];
-                if (piece.IsEmpty)
+                if (piece.IsEmpty || piece.trophy)
                 {
-                    continue;
+                    continue; // a trophy only leaves through the bottom
                 }
 
                 var cover = board.CoverAt(cell);
@@ -534,9 +586,11 @@ namespace CadenceClub.Core
             }
 
             var cover = board.CoverAt(cell);
+            bool oil = cover.oil;
             cover.crate--;
+            cover.oil = oil && cover.crate > 0;
             board.SetCover(cell, cover);
-            events.Add(new BoardEvent { type = BoardEventType.CrateHit, a = cell, value = cover.crate });
+            events.Add(new BoardEvent { type = oil ? BoardEventType.OilCleared : BoardEventType.CrateHit, a = cell, value = cover.crate });
         }
 
         /// <summary>Cells a special clears when it goes off.</summary>
@@ -688,6 +742,11 @@ namespace CadenceClub.Core
 
             var pa = board[a];
             var pb = board[b];
+            if (MoveResolver.DiscoOnTrophy(pa, pb))
+            {
+                return false;
+            }
+
             if (pa.special == Special.Disco || pb.special == Special.Disco || (pa.IsSpecial && pb.IsSpecial))
             {
                 return true;
@@ -753,9 +812,9 @@ namespace CadenceClub.Core
             {
                 for (int x = 0; x < board.Width; x++)
                 {
-                    if (board.IsPlayable(x, y) && !board[x, y].IsEmpty && !board.IsLocked(new Cell(x, y)))
+                    if (board.IsPlayable(x, y) && !board[x, y].IsEmpty && !board[x, y].trophy && !board.IsLocked(new Cell(x, y)))
                     {
-                        cells.Add(new Cell(x, y));
+                        cells.Add(new Cell(x, y)); // a trophy keeps its place (shuffled to the bottom, it would just leave)
                         pieces.Add(board[x, y]);
                     }
                 }
@@ -810,7 +869,7 @@ namespace CadenceClub.Core
                 {
                     for (int x = 0; x < board.Width; x++)
                     {
-                        if (!board.IsPlayable(x, y) || board.HasCrate(x, y) || (keepSpecials && board[x, y].IsSpecial))
+                        if (!board.IsPlayable(x, y) || board.HasCrate(x, y) || board[x, y].trophy || (keepSpecials && board[x, y].IsSpecial))
                         {
                             continue;
                         }

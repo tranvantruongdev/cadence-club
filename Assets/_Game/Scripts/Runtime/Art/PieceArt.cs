@@ -36,6 +36,8 @@ namespace CadenceClub.Art
         private static Sprite _ring;
         private static Sprite _heart;
         private static Sprite _coin;
+        private static Sprite _trophy;
+        private static Sprite _oil;
 
         public static Sprite Piece(int color)
         {
@@ -105,8 +107,28 @@ namespace CadenceClub.Art
         /// <summary>Gems: the blue gem piece.</summary>
         public static Sprite Gem => Piece(2);
 
+        /// <summary>The goal item: a gold cup (bowl, two handles, stem, base).</summary>
+        public static Sprite Trophy => _trophy != null ? _trophy : (_trophy = Draw("Trophy", (x, y) =>
+        {
+            float bowl = Mathf.Max(Mathf.Sqrt(x * x + (y - 0.3f) * (y - 0.3f)) - 0.5f, y - 0.42f);
+            float handles = Mathf.Abs(Mathf.Sqrt((Mathf.Abs(x) - 0.5f) * (Mathf.Abs(x) - 0.5f) + (y - 0.22f) * (y - 0.22f)) - 0.15f) - 0.05f;
+            float stem = RoundedBox(x, y + 0.36f, 0.1f, 0.18f, 0.04f);
+            float foot = RoundedBox(x, y + 0.62f, 0.36f, 0.1f, 0.05f);
+            return Mathf.Min(Mathf.Min(bowl, handles), Mathf.Min(stem, foot));
+        }, Hex(0xF5C542)));
+
+        /// <summary>An oil spill: a dark, glossy puddle of three merged blobs.</summary>
+        public static Sprite Oil => _oil != null ? _oil : (_oil = Draw("Oil", (x, y) => Mathf.Min(
+            Mathf.Min(Mathf.Sqrt((x + 0.28f) * (x + 0.28f) + (y + 0.12f) * (y + 0.12f)) - 0.5f,
+                Mathf.Sqrt((x - 0.3f) * (x - 0.3f) + (y + 0.02f) * (y + 0.02f)) - 0.46f),
+            Mathf.Sqrt(x * x + (y - 0.34f) * (y - 0.34f)) - 0.38f), Hex(0x3A2D55)));
+
         public static Sprite GoalIcon(Goal goal) =>
-            goal.kind == GoalKind.Crates ? Crate(2) : goal.kind == GoalKind.Ice ? Ice : Piece(goal.color);
+            goal.kind == GoalKind.Crates ? Crate(2)
+            : goal.kind == GoalKind.Ice ? Ice
+            : goal.kind == GoalKind.Oil ? Oil
+            : goal.kind == GoalKind.Trophies ? Trophy
+            : Piece(goal.color);
 
         private static float Shape(int color, float x, float y)
         {

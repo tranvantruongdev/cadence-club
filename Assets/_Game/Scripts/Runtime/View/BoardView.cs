@@ -149,7 +149,9 @@ namespace CadenceClub.View
 
                     if (cover.crate > 0)
                     {
-                        _crates[cell] = CoverSprite("Crate", cell, PieceArt.Crate(cover.crate), 10, 0.92f);
+                        _crates[cell] = cover.oil
+                            ? CoverSprite("Oil", cell, PieceArt.Oil, 10, 0.92f) // oil is a one-hit crate that spreads
+                            : CoverSprite("Crate", cell, PieceArt.Crate(cover.crate), 10, 0.92f);
                     }
 
                     if (cover.ice)
@@ -342,14 +344,27 @@ namespace CadenceClub.View
             _breaking.Clear();
             bool anyClear = false;
             var created = new List<BoardEvent>();
+            var spills = new List<Cell>();
             for (int i = from; i < to; i++)
             {
                 var e = events[i];
-                if (e.type == BoardEventType.Cleared && _pieces.TryGetValue(e.a, out var view))
+                if ((e.type == BoardEventType.Cleared || e.type == BoardEventType.TrophyCollected) && _pieces.TryGetValue(e.a, out var view))
                 {
                     _pieces.Remove(e.a);
                     _clearing.Add(view);
                     clears.Group(Tween.Scale(view.root, 0f, ClearSeconds, Ease.InBack));
+                    anyClear = true;
+                }
+                else if (e.type == BoardEventType.OilSpread)
+                {
+                    // The piece under the new oil shrinks away; the puddle grows in with the pops below.
+                    if (_pieces.Remove(e.b, out var covered))
+                    {
+                        _clearing.Add(covered);
+                        clears.Group(Tween.Scale(covered.root, 0f, ClearSeconds, Ease.InBack));
+                    }
+
+                    spills.Add(e.b);
                     anyClear = true;
                 }
                 else if (e.type == BoardEventType.CrateHit && e.value > 0 && _crates.TryGetValue(e.a, out var crate))
@@ -358,9 +373,10 @@ namespace CadenceClub.View
                     clears.Group(Tween.Scale(crate.transform, 1.06f, ClearSeconds * 0.5f, Ease.OutQuad, 2, CycleMode.Yoyo));
                     anyClear = true;
                 }
-                else if (e.type == BoardEventType.CrateHit || e.type == BoardEventType.IceBroken || e.type == BoardEventType.ChainBroken)
+                else if (e.type == BoardEventType.CrateHit || e.type == BoardEventType.OilCleared || e.type == BoardEventType.IceBroken ||
+                         e.type == BoardEventType.ChainBroken)
                 {
-                    var map = e.type == BoardEventType.CrateHit ? _crates : e.type == BoardEventType.IceBroken ? _ice : _chains;
+                    var map = e.type == BoardEventType.IceBroken ? _ice : e.type == BoardEventType.ChainBroken ? _chains : _crates;
                     Break(map, e.a, clears);
                     anyClear = true;
                 }
@@ -368,7 +384,7 @@ namespace CadenceClub.View
                 {
                     JuiceFx.Shake(Camera.main != null ? Camera.main.transform : null, 0.12f, 0.2f);
                 }
-                else if (e.type == BoardEventType.SpecialCreated)
+                else if (e.type == BoardEventType.SpecialCreated || e.type == BoardEventType.TrophyDropped)
                 {
                     created.Add(e);
                 }
@@ -395,9 +411,16 @@ namespace CadenceClub.View
                 clears.Stop();
             }
 
-            if (created.Count > 0)
+            if (created.Count > 0 || spills.Count > 0)
             {
                 var pops = Sequence.Create();
+                foreach (var cell in spills)
+                {
+                    var oil = CoverSprite("Oil", cell, PieceArt.Oil, 10, 0f);
+                    _crates[cell] = oil;
+                    pops.Group(Tween.Scale(oil.transform, 0.92f, PopSeconds, Ease.OutBack));
+                }
+
                 foreach (var e in created)
                 {
                     if (_pieces.TryGetValue(e.a, out var kept))
@@ -502,7 +525,7 @@ namespace CadenceClub.View
             view.root.gameObject.SetActive(true);
             view.root.position = position;
             view.root.localScale = Vector3.one * PieceScale;
-            view.body.sprite = piece.special == Special.Disco ? PieceArt.Disco : PieceArt.Piece(piece.color);
+            view.body.sprite = piece.trophy ? PieceArt.Trophy : piece.special == Special.Disco ? PieceArt.Disco : PieceArt.Piece(piece.color);
             var mark = PieceArt.Mark(piece.special);
             view.mark.sprite = mark;
             view.mark.enabled = mark != null;
