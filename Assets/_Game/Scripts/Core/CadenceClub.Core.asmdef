@@ -1,0 +1,16 @@
+{
+    "name": "CadenceClub.Core",
+    "rootNamespace": "CadenceClub.Core",
+    "references": [
+        "Template.Core"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": true
+}

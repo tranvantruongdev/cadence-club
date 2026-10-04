@@ -2,13 +2,19 @@ name: Release
 
 # Push a tag like v1.2.0 → builds Android APK + AAB and a Windows zip, creates a GitHub Release,
 # and (if configured) pushes the APK and Windows builds to itch.io.
+# Run it by hand (Actions → Release → Run workflow) for a dry run: everything builds and is packaged as a
+# "release-dry-run" artifact (signed APK, AAB, Windows zip); nothing is published.
 #
-# Secrets: UNITY_LICENSE, UNITY_EMAIL, UNITY_PASSWORD,
+# Secrets: UNITY_EMAIL, UNITY_PASSWORD,
 #          ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASS, ANDROID_KEYALIAS_NAME, ANDROID_KEYALIAS_PASS,
 #          BUTLER_API_KEY (itch.io → Settings → API keys)
 # Variables: ITCH_USER, ITCH_GAME (leave unset to skip itch.io)
+# Unity Personal licence: GameCI's `personal` method signs in with the account. Don't pass a .ulf as
+# UNITY_LICENSE: Unity removed offline activation for Personal seats and the Hub's .ulf fails on the
+# runner ("TimeStamp validation failed"). unity-builder@v6 (a game-ci/cli wrapper) has that method; v4 doesn't.
 # Check input names against https://game.ci/docs/github/builder when upgrading GameCI.
 on:
+  workflow_dispatch:
   push:
     tags: ['v*']
 
@@ -16,24 +22,26 @@ permissions:
   contents: write
 
 jobs:
-  # Skips the whole release (instead of failing) until the Unity licence secret exists.
+  # Skips the whole release (instead of failing) until the Unity login secrets exist.
   check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       licence: ${{ steps.licence.outputs.present }}
     steps:
       - id: licence
         env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
-        run: echo "present=$([ -n "$UNITY_LICENSE" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        run: echo "present=$([ -n "$UNITY_EMAIL" ] && [ -n "$UNITY_PASSWORD" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build ${{ matrix.name }}
     needs: check
     if: needs.check.outputs.licence == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
+      max-parallel: 1 # each build signs in and takes a Unity Personal seat; don't hold three at once
       matrix:
         include:
           - name: android-apk
@@ -46,25 +54,25 @@ jobs:
             targetPlatform: StandaloneWindows64
             androidExportType: androidPackage
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # GameCI's Semantic versioning reads the tag history
 
-      - uses: jlumbroso/free-disk-space@v1.3.1
+      - uses: jlumbroso/free-disk-space@v2.0.0
         if: matrix.targetPlatform == 'Android'
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: Library
           key: Library-${{ matrix.targetPlatform }}-${{ hashFiles('Packages/packages-lock.json') }}
           restore-keys: Library-${{ matrix.targetPlatform }}-
 
-      - uses: game-ci/unity-builder@v4
+      - uses: game-ci/unity-builder@v6
         env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
+          buildsPath: build # the upload step below reads build/<targetPlatform>
           targetPlatform: ${{ matrix.targetPlatform }}
           androidExportType: ${{ matrix.androidExportType }}
           androidKeystoreName: release.keystore
@@ -75,16 +83,18 @@ jobs:
           versioning: Semantic
           buildName: game
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.name }}
           path: build/${{ matrix.targetPlatform }}
 
+  # On a v* tag: package and publish. On a manual run (dry run): package only, and keep the packaged
+  # files as a "release-dry-run" artifact, so the signed APK can be downloaded and tried.
   publish:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
 
@@ -98,8 +108,23 @@ jobs:
           (cd dist/windows && zip -qr "../../release/${name}-windows.zip" . -x '*_DoNotShip/*')
           ls -la release
 
+      - uses: actions/upload-artifact@v7
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        with:
+          name: release-dry-run
+          path: release/
+
+      # GitHub first: if itch.io isn't ready (no page yet, key revoked), the release still exists.
+      - uses: softprops/action-gh-release@v3
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          files: |
+            release/*.apk
+            release/*-windows.zip
+          generate_release_notes: true
+
       - name: Push to itch.io
-        if: vars.ITCH_USER != '' && vars.ITCH_GAME != ''
+        if: startsWith(github.ref, 'refs/tags/v') && vars.ITCH_USER != '' && vars.ITCH_GAME != ''
         env:
           BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
           ITCH_TARGET: ${{ vars.ITCH_USER }}/${{ vars.ITCH_GAME }}
@@ -109,10 +134,3 @@ jobs:
           unzip -q butler.zip && chmod +x butler
           ./butler push release/*.apk "$ITCH_TARGET:android" --userversion "${{ github.ref_name }}"
           ./butler push release/*-windows.zip "$ITCH_TARGET:windows" --userversion "${{ github.ref_name }}"
-
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            release/*.apk
-            release/*-windows.zip
-          generate_release_notes: true

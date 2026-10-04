@@ -5,8 +5,8 @@
 # Steps (each one asks first, so you can skip any):
 #   1. Android signing keystore, created OUTSIDE the repo in %USERPROFILE%\.keystores\
 #      -> GitHub secrets ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASS, ANDROID_KEYALIAS_NAME, ANDROID_KEYALIAS_PASS
-#   2. Unity Personal licence for CI (the .ulf file Unity Hub wrote on this PC, plus your Unity login)
-#      -> GitHub secrets UNITY_LICENSE, UNITY_EMAIL, UNITY_PASSWORD
+#   2. Unity login for CI builds (Personal licence: the CI signs in with your account)
+#      -> GitHub secrets UNITY_EMAIL, UNITY_PASSWORD
 #   3. itch.io (needs an itch.io account and an API key from itch.io > Settings > API keys)
 #      -> GitHub secret BUTLER_API_KEY, variables ITCH_USER, ITCH_GAME
 #
@@ -89,11 +89,10 @@ if (Ask "1/3  Create the Android signing keystore and upload it to GitHub secret
     Write-Host "  BACK UP $keystore (e.g. to your cloud drive) together with the password." -ForegroundColor Yellow
 }
 
-# --- 2. Unity licence for CI ---------------------------------------------------------------------
-if (Ask "2/3  Upload the Unity Personal licence and your Unity login for CI builds?") {
-    $ulf = "C:\ProgramData\Unity\Unity_lic.ulf"
-    if (-not (Test-Path -LiteralPath $ulf)) { throw "$ulf not found. Sign in to Unity Hub and open any project once, then rerun." }
-    SetSecret "UNITY_LICENSE" (Get-Content -LiteralPath $ulf -Raw)
+# --- 2. Unity login for CI -----------------------------------------------------------------------
+# CI signs in with the account (GameCI's `personal` method). No .ulf: Unity removed offline activation
+# for Personal seats, and the Hub's Unity_lic.ulf fails on the runner ("TimeStamp validation failed").
+if (Ask "2/3  Upload your Unity login (email + password) for CI builds?") {
     SetSecret "UNITY_EMAIL" (Read-Host "Unity account email")
     SetSecret "UNITY_PASSWORD" (ReadSecret "Unity account password")
     Write-Host "  If your Unity account uses two-factor sign-in, CI activation can fail; see https://game.ci/docs/github/activation" -ForegroundColor Yellow
