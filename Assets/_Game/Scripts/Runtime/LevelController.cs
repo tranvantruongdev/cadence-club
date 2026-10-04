@@ -36,6 +36,8 @@ namespace CadenceClub
         private Bot _hintBot;
         private float _idle;
         private bool _busy;
+        private bool _lifeOwed;
+        private List<BoosterDef> _boosters;
         private bool _pressing;
         private Vector3 _pressWorld;
         private Cell _pressCell;
@@ -57,6 +59,8 @@ namespace CadenceClub
 
 
             _hintBot = new Bot(BotKind.Greedy, new SeededRandom(1)); // hints the move a careful player would make
+            _boosters = Club.PendingBoosters.Select(id => Club.Master.Boosters.FirstOrDefault(b => b.id == id)).Where(b => b != null).ToList();
+            Club.PendingBoosters.Clear(); // bought for this level's first try only
             AppLifecycle.BackPressed += GoHome;
             Play(Levels.Override ?? Levels.Next(Club.Data.level));
         }
@@ -81,6 +85,7 @@ namespace CadenceClub
             _hud = LevelHud.Create(_def);
             _hud.RetryPressed += Retry;
             _hud.NextPressed += NextLevel;
+            _hud.ContinuePressed += ContinueLevel;
             _hud.HomePressed += GoHome;
             _hud.PowerPressed += slot => UsePower(slot).Forget();
             Restart();
@@ -91,6 +96,7 @@ namespace CadenceClub
         /// <summary>Playing again needs a life; with none, the end card says when the next one comes.</summary>
         private void Retry()
         {
+            PayLostLife();
             var club = Club.Data;
             if (club.Lives(Club.Master, Club.Now) <= 0)
             {
@@ -99,6 +105,42 @@ namespace CadenceClub
             }
 
             Restart();
+        }
+
+        /// <summary>"+5 moves" on the loss card: pays coins and the level carries on, with no life lost.</summary>
+        private void ContinueLevel()
+        {
+            var md = Club.Master;
+            if (_state.Outcome != LevelOutcome.Lost)
+            {
+                return;
+            }
+
+            if (!Club.Data.TryBuyContinue(md))
+            {
+                _hud.ShowEndMessage($"Not enough coins: {md.Int("extra_moves_cost")} needed, you have {Club.Data.coins}.");
+                return;
+            }
+
+            _state.Continue(md.Int("extra_moves"));
+            _lifeOwed = false;
+            Club.Save();
+            _hud.HideEnd();
+            _hud.Refresh(_state);
+            _idle = 0f;
+        }
+
+        /// <summary>A lost level costs a life once the player leaves it (Try again, Home) without buying more moves.</summary>
+        private void PayLostLife()
+        {
+            if (!_lifeOwed)
+            {
+                return;
+            }
+
+            _lifeOwed = false;
+            Club.Data.SpendLife(Club.Master, Club.Now);
+            Club.Save();
         }
 
         /// <summary>Pays out a win (coins, the first-win ★, the scripted free rider) or charges a life for a loss, and saves.</summary>
@@ -124,9 +166,9 @@ namespace CadenceClub
             }
             else
             {
-                club.SpendLife(md, Club.Now);
-                int lives = club.Lives(md, Club.Now);
-                line = lives == 1 ? "1 life left" : $"{lives} lives left";
+                // ponytail: quitting the app on this card keeps the life; charge it at loss time if that matters.
+                _lifeOwed = true;
+                line = $"Keep going for {md.Int("extra_moves_cost")} coins, or leaving costs a life.";
             }
 
             Club.Save();
@@ -137,7 +179,8 @@ namespace CadenceClub
         {
             var md = Club.Master;
             var squad = Club.Data.Squad(md).Where(o => md.Rider(o.id) != null).Select(o => new RiderSlot(md.Rider(o.id), o.level));
-            _state = new LevelState(_def, (ulong)DateTime.UtcNow.Ticks, squad);
+            _state = new LevelState(_def, (ulong)DateTime.UtcNow.Ticks, squad, _boosters);
+            _boosters = null;
             if (_board == null)
             {
                 _board = BoardView.Create(_state.Board);
@@ -273,7 +316,10 @@ namespace CadenceClub
                     Haptics.Medium();
                 }
 
-                _hud.ShowEnd(_state, hasNext: _def.id < Levels.Count, Settle());
+                string rewards = Settle();
+                var md = Club.Master;
+                _hud.ShowEnd(_state, hasNext: _def.id < Levels.Count, rewards,
+                    $"+{md.Int("extra_moves")} moves  ·  {md.Int("extra_moves_cost")}");
             }
 
             _idle = 0f;
@@ -293,6 +339,10 @@ namespace CadenceClub
             }
         }
 
-        private void GoHome() => Services.Get<GameFlow>().GoToAsync(AppState.Title).Forget();
+        private void GoHome()
+        {
+            PayLostLife();
+            Services.Get<GameFlow>().GoToAsync(AppState.Title).Forget();
+        }
     }
 }

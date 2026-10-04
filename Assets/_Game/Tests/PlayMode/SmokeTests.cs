@@ -53,11 +53,31 @@ namespace CadenceClub.PlayModeTests
                 yield return new WaitForSeconds(0.6f);
                 Capture("0-title");
 
-                // Home: build a renovation task with a star, then open the level start popup.
                 var home = Object.FindAnyObjectByType<HomeController>();
                 Assert.IsNotNull(home, "Home opens after boot");
                 var homeClub = Club.Data;
                 var homeMd = Club.Master;
+                var stack = (Template.UI.ScreenStack)typeof(HomeController).GetField("_stack", Private).GetValue(home);
+
+                // The daily gift opens on arrival when today's isn't claimed; a second run on the same day opens it by hand.
+                yield return new WaitForSeconds(0.6f);
+                var daily = (CadenceClub.UI.DailyLoginScreen)typeof(HomeController).GetField("_daily", Private).GetValue(home);
+                if (stack.Top != daily)
+                {
+                    homeClub.lastLoginDay = -1;
+                    daily.OpenAsync().Forget();
+                    yield return new WaitForSeconds(0.6f);
+                }
+
+                Capture("0-daily-gift");
+                int gemsBeforeGift = homeClub.gems;
+                typeof(CadenceClub.UI.DailyLoginScreen).GetMethod("Claim", Private).Invoke(daily, null);
+                Assert.Greater(homeClub.gems, gemsBeforeGift, "the daily gift pays gems");
+                yield return new WaitForSeconds(0.4f);
+                Capture("0-daily-claimed");
+                yield return stack.PopAsync().ToCoroutine();
+
+                // Home: build a renovation task with a star.
                 var task = homeMd.Tasks.FirstOrDefault(t => !homeClub.IsBuilt(t.id) && t.area == homeClub.CurrentArea(homeMd).id);
                 if (task != null)
                 {
@@ -72,7 +92,6 @@ namespace CadenceClub.PlayModeTests
                 // Recruit: a 10-pull, the reveal mid-way and skipped to its summary; then the collection and a rider's card.
                 homeClub.level = Mathf.Max(homeClub.level, homeMd.Int("recruit_after_level") + 1);
                 homeClub.gems = Mathf.Max(homeClub.gems, homeMd.Int("ten_pull_cost"));
-                var stack = (Template.UI.ScreenStack)typeof(HomeController).GetField("_stack", Private).GetValue(home);
                 var recruit = (CadenceClub.UI.RecruitScreen)typeof(HomeController).GetField("_recruit", Private).GetValue(home);
                 var reveal = (CadenceClub.UI.RevealScreen)typeof(HomeController).GetField("_reveal", Private).GetValue(home);
                 recruit.OpenAsync().Forget();
@@ -100,14 +119,37 @@ namespace CadenceClub.PlayModeTests
                 yield return stack.PopAsync().ToCoroutine();
                 yield return stack.PopAsync().ToCoroutine();
 
-                var levelStart = (CadenceClub.UI.LevelStartScreen)typeof(HomeController).GetField("_levelStart", Private).GetValue(home);
-                levelStart.OpenAsync(Levels.Load(Levels.Next(homeClub.level))).Forget();
+                // Demo shop: a free pack adds its gems.
+                var shop = (CadenceClub.UI.ShopScreen)typeof(HomeController).GetField("_shop", Private).GetValue(home);
+                shop.OpenAsync().Forget();
                 yield return new WaitForSeconds(0.6f);
-                Capture("0c-level-start");
+                Capture("0i-shop");
+                int gemsBeforeShop = homeClub.gems;
+                typeof(CadenceClub.UI.ShopScreen).GetMethod("Claim", Private).Invoke(shop, new object[] { "handful" });
+                Assert.AreEqual(gemsBeforeShop + 100, homeClub.gems, "a demo pack adds its gems");
+                yield return stack.PopAsync().ToCoroutine();
 
+                // Level start: pick two boosters, then Play pays for them and they start on the board.
+                homeClub.coins = Mathf.Max(homeClub.coins, 1000);
+                homeClub.lives = homeMd.Int("lives_max");
+                var levelStart = (CadenceClub.UI.LevelStartScreen)typeof(HomeController).GetField("_levelStart", Private).GetValue(home);
+                levelStart.OpenAsync(Levels.Load(1)).Forget();
+                yield return new WaitForSeconds(0.6f);
+                var toggle = typeof(CadenceClub.UI.LevelStartScreen).GetMethod("Toggle", Private);
+                toggle.Invoke(levelStart, new object[] { homeMd.Boosters.First(b => b.id == "rockets") });
+                toggle.Invoke(levelStart, new object[] { homeMd.Boosters.First(b => b.id == "bomb") });
+                yield return null;
+                Capture("0c-level-start");
+                int coinsBeforeBoosters = homeClub.coins;
                 Levels.Override = 1; // a save from an earlier run could be further along
-                yield return EnterGame();
+                typeof(CadenceClub.UI.LevelStartScreen).GetMethod("Play", Private).Invoke(levelStart, null);
+                Assert.AreEqual(coinsBeforeBoosters - homeClub.BoostersCost(homeMd, new[] { "rockets", "bomb" }), homeClub.coins, "Play pays for the boosters");
+                yield return WaitForScene("Game", 20f);
+                yield return new WaitForSeconds(0.6f);
                 var controller = Object.FindAnyObjectByType<LevelController>();
+                var startBoard = State(controller).Board;
+                int specials = Enumerable.Range(0, startBoard.Height).Sum(y => Enumerable.Range(0, startBoard.Width).Count(x => startBoard[x, y].IsSpecial));
+                Assert.GreaterOrEqual(specials, 3, "the 2 rockets and the bomb start on the board");
                 Capture("level1-start");
 
                 // Nobody moves for 5 s: the board hints a move.
@@ -164,6 +206,20 @@ namespace CadenceClub.PlayModeTests
                 Assert.AreEqual(0, drifts, "the board view should match the Core board after a power");
                 Capture("obstacles-after-power");
 
+                // Cut to 2 moves so the level is lost, then buy +5 moves: it carries on and no life is charged.
+                typeof(LevelState).GetProperty("MovesLeft").SetValue(State(controller), 2);
+                yield return PlayToEnd(controller, "obstacles-short");
+                Assert.AreEqual(LevelOutcome.Lost, State(controller).Outcome, "2 moves can't clear level 20");
+                club.coins = Mathf.Max(club.coins, md.Int("extra_moves_cost"));
+                int coinsBeforeContinue = club.coins;
+                int livesBeforeContinue = club.Lives(md, Club.Now);
+                typeof(LevelController).GetMethod("ContinueLevel", Private).Invoke(controller, null);
+                Assert.AreEqual((LevelOutcome.Playing, md.Int("extra_moves")), (State(controller).Outcome, State(controller).MovesLeft));
+                Assert.AreEqual(coinsBeforeContinue - md.Int("extra_moves_cost"), club.coins, "+5 moves cost their coins");
+                Assert.AreEqual(livesBeforeContinue, club.Lives(md, Club.Now), "continuing costs no life");
+                yield return new WaitForSeconds(0.3f);
+                Capture("obstacles-continued");
+
                 yield return PlayToEnd(controller, "obstacles");
                 Assert.AreEqual(0, drifts, "obstacles: the board view should match the Core board after every move");
 
@@ -207,6 +263,7 @@ namespace CadenceClub.PlayModeTests
             var busy = typeof(LevelController).GetField("_busy", Private);
             var bot = new Bot(BotKind.Greedy, new SeededRandom(7));
             int moves = 0;
+            int usedBefore = state.MovesUsed; // a continued level is played to its end twice
             while (state.Outcome == LevelOutcome.Playing && moves < MaxMoves)
             {
                 var move = bot.Choose(state);
@@ -229,11 +286,11 @@ namespace CadenceClub.PlayModeTests
             }
 
             Assert.AreNotEqual(LevelOutcome.Playing, state.Outcome, $"{name}: the level should end within {MaxMoves} moves");
-            Assert.AreEqual(state.MovesUsed, moves, $"{name}: every bot move should count as one move");
+            Assert.AreEqual(moves, state.MovesUsed - usedBefore, $"{name}: every bot move should count as one move");
             var hud = typeof(LevelController).GetField("_hud", Private).GetValue(controller);
             var bodyLabel = hud.GetType().GetField("_endBody", Private).GetValue(hud);
             string body = (string)bodyLabel.GetType().GetProperty("text").GetValue(bodyLabel);
-            StringAssert.Contains(state.Outcome == LevelOutcome.Won ? "coins" : "left", body, $"{name}: the end card shows the payout or lives");
+            StringAssert.Contains("coins", body, $"{name}: the end card shows the payout, or the coins to keep going");
             yield return new WaitForSecondsRealtime(0.5f);
             Capture($"{name}-{(state.Outcome == LevelOutcome.Won ? "won" : "lost")}");
         }

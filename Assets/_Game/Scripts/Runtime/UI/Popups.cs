@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using CadenceClub.Art;
 using CadenceClub.Core;
 using Cysharp.Threading.Tasks;
+using Template.Feel;
 using Template.UI;
 using TMPro;
 using UnityEngine;
@@ -17,6 +19,8 @@ namespace CadenceClub.UI
         private LevelDef _def;
         private RectTransform _card;
         private RectTransform _squad;
+        private RectTransform _boosterRow;
+        private readonly HashSet<string> _picked = new HashSet<string>();
         private TextMeshProUGUI _playLabel;
 
         public event Action PlayPressed;
@@ -37,6 +41,7 @@ namespace CadenceClub.UI
         public UniTask OpenAsync(LevelDef def)
         {
             _def = def;
+            _picked.Clear();
             Build();
             return _stack.PushAsync(this);
         }
@@ -55,14 +60,14 @@ namespace CadenceClub.UI
             }
 
             var theme = UiTheme.Current;
-            _card = UiFactory.CreateCard(transform, Vector2.zero, new Vector2(920f, 1240f));
-            UiFactory.CreateText(_card, $"Level {_def.id}", 96, new Vector2(0f, 510f), new Vector2(700f, 130f), TextAlignmentOptions.Center, UiFont.Display)
+            _card = UiFactory.CreateCard(transform, Vector2.zero, new Vector2(920f, 1560f));
+            UiFactory.CreateText(_card, $"Level {_def.id}", 96, new Vector2(0f, 660f), new Vector2(700f, 130f), TextAlignmentOptions.Center, UiFont.Display)
                 .color = theme.ink;
-            UiFactory.CreateIconButton(_card, theme.iconClose, new Vector2(380f, 530f), 96f, () => _stack.PopAsync().Forget(), ButtonStyle.Secondary, "x");
+            UiFactory.CreateIconButton(_card, theme.iconClose, new Vector2(380f, 680f), 96f, () => _stack.PopAsync().Forget(), ButtonStyle.Secondary, "x");
             if (LevelBands.For(_def.id).max < 0.6)
             {
-                UiFactory.CreateRounded(_card, new Vector2(0f, 415f), new Vector2(260f, 60f), theme.highlight, 30);
-                UiFactory.CreateText(_card, "Hard level", 34, new Vector2(0f, 417f), new Vector2(260f, 60f), TextAlignmentOptions.Center, UiFont.Display);
+                UiFactory.CreateRounded(_card, new Vector2(0f, 565f), new Vector2(260f, 60f), theme.highlight, 30);
+                UiFactory.CreateText(_card, "Hard level", 34, new Vector2(0f, 567f), new Vector2(260f, 60f), TextAlignmentOptions.Center, UiFont.Display);
             }
 
             float spacing = 210f;
@@ -71,18 +76,79 @@ namespace CadenceClub.UI
                 float x = (i - (_def.goals.Length - 1) * 0.5f) * spacing;
                 var goal = _def.goals[i];
                 var tint = goal.kind == GoalKind.Ice ? new Color(0.45f, 0.7f, 0.95f) : Color.white;
-                UiFactory.CreateImage(_card, PieceArt.GoalIcon(goal), new Vector2(x, 270f), new Vector2(130f, 130f), tint);
-                UiFactory.CreateText(_card, goal.count.ToString(), 56, new Vector2(x, 170f), new Vector2(200f, 70f), TextAlignmentOptions.Center, UiFont.Display)
+                UiFactory.CreateImage(_card, PieceArt.GoalIcon(goal), new Vector2(x, 420f), new Vector2(130f, 130f), tint);
+                UiFactory.CreateText(_card, goal.count.ToString(), 56, new Vector2(x, 320f), new Vector2(200f, 70f), TextAlignmentOptions.Center, UiFont.Display)
                     .color = theme.ink;
             }
 
-            UiFactory.CreateText(_card, $"in {_def.moves} moves", 44, new Vector2(0f, 90f), new Vector2(700f, 60f)).color = theme.muted;
-            UiFactory.CreateRounded(_card, new Vector2(0f, 30f), new Vector2(760f, 4f), new Color(0f, 0f, 0f, 0.1f), 2);
-            UiFactory.CreateText(_card, "Squad", 40, new Vector2(0f, -30f), new Vector2(700f, 60f), TextAlignmentOptions.Center, UiFont.Display).color = theme.ink;
+            UiFactory.CreateText(_card, $"in {_def.moves} moves", 44, new Vector2(0f, 240f), new Vector2(700f, 60f)).color = theme.muted;
+            UiFactory.CreateRounded(_card, new Vector2(0f, 185f), new Vector2(760f, 4f), new Color(0f, 0f, 0f, 0.1f), 2);
+            UiFactory.CreateText(_card, "Squad", 40, new Vector2(0f, 130f), new Vector2(700f, 60f), TextAlignmentOptions.Center, UiFont.Display).color = theme.ink;
             BuildSquad();
 
-            var play = UiFactory.CreateButton(_card, "Play", new Vector2(0f, -470f), new Vector2(720f, 160f), Play, ButtonStyle.Primary);
+            UiFactory.CreateRounded(_card, new Vector2(0f, -175f), new Vector2(760f, 4f), new Color(0f, 0f, 0f, 0.1f), 2);
+            UiFactory.CreateText(_card, "Boosters", 40, new Vector2(0f, -225f), new Vector2(700f, 60f), TextAlignmentOptions.Center, UiFont.Display)
+                .color = theme.ink;
+            var play = UiFactory.CreateButton(_card, "Play", new Vector2(0f, -640f), new Vector2(720f, 160f), Play, ButtonStyle.Primary);
             _playLabel = play.GetComponentInChildren<TextMeshProUGUI>();
+            BuildBoosters();
+        }
+
+        /// <summary>Three toggles, each a special placed on the board at the start for coins; paid when Play is pressed.</summary>
+        private void BuildBoosters()
+        {
+            if (_boosterRow != null)
+            {
+                Destroy(_boosterRow.gameObject);
+            }
+
+            var theme = UiTheme.Current;
+            var md = Club.Master;
+            var club = Club.Data;
+            _boosterRow = UiFactory.CreateRect("Boosters", _card);
+            _boosterRow.anchoredPosition = new Vector2(0f, -375f);
+            for (int i = 0; i < md.Boosters.Count; i++)
+            {
+                var booster = md.Boosters[i];
+                bool picked = _picked.Contains(booster.id);
+                float x = (i - (md.Boosters.Count - 1) * 0.5f) * 270f;
+                var tile = UiFactory.CreateButton(_boosterRow, "", new Vector2(x, 0f), new Vector2(250f, 210f), () => Toggle(booster),
+                    picked ? ButtonStyle.Primary : ButtonStyle.Secondary);
+                var icon = booster.special == Special.Disco ? PieceArt.Disco : PieceArt.Piece(2);
+                UiFactory.CreateImage(tile.transform, icon, new Vector2(0f, 45f), new Vector2(96f, 96f), Color.white);
+                var mark = PieceArt.Mark(booster.special);
+                if (mark != null)
+                {
+                    UiFactory.CreateImage(tile.transform, mark, new Vector2(0f, 45f), new Vector2(96f, 96f), Color.white);
+                }
+
+                UiFactory.CreateText(tile.transform, booster.count > 1 ? $"{booster.name} ×{booster.count}" : booster.name, 32, new Vector2(0f, -32f),
+                    new Vector2(240f, 46f), TextAlignmentOptions.Center, UiFont.Display).color = theme.ink;
+                UiFactory.CreateImage(tile.transform, PieceArt.Coin, new Vector2(-34f, -74f), new Vector2(36f, 36f), Color.white);
+                UiFactory.CreateText(tile.transform, booster.cost.ToString(), 30, new Vector2(66f, -73f), new Vector2(120f, 40f), TextAlignmentOptions.MidlineLeft)
+                    .color = theme.ink;
+            }
+
+            UiFactory.CreateText(_boosterRow, $"You have {club.coins:N0} coins", 32, new Vector2(0f, -140f), new Vector2(700f, 50f)).color = theme.muted;
+            int cost = club.BoostersCost(md, _picked);
+            _playLabel.text = cost > 0 ? $"Play  ·  {cost:N0} coins" : "Play";
+        }
+
+        private void Toggle(BoosterDef booster)
+        {
+            var club = Club.Data;
+            if (!_picked.Remove(booster.id))
+            {
+                if (club.coins < club.BoostersCost(Club.Master, _picked) + booster.cost)
+                {
+                    JuiceFx.Punch(_boosterRow, 0.05f, 0.2f); // can't cover it with the other picks
+                    return;
+                }
+
+                _picked.Add(booster.id);
+            }
+
+            BuildBoosters();
         }
 
         private void BuildSquad()
@@ -96,7 +162,7 @@ namespace CadenceClub.UI
             var md = Club.Master;
             var club = Club.Data;
             _squad = UiFactory.CreateRect("Squad", _card);
-            _squad.anchoredPosition = new Vector2(0f, -200f);
+            _squad.anchoredPosition = new Vector2(0f, -30f);
             int slots = club.SquadSlots(md);
             if (slots == 0)
             {
@@ -140,13 +206,23 @@ namespace CadenceClub.UI
         private void Play()
         {
             var club = Club.Data;
-            if (club.Lives(Club.Master, Club.Now) <= 0)
+            var md = Club.Master;
+            if (club.Lives(md, Club.Now) <= 0)
             {
-                var next = club.NextLifeIn(Club.Master, Club.Now);
+                var next = club.NextLifeIn(md, Club.Now);
                 _playLabel.text = $"Next life in {next.Minutes}:{next.Seconds:00}";
                 return;
             }
 
+            if (!club.TrySpendCoins(club.BoostersCost(md, _picked)))
+            {
+                JuiceFx.Punch(_boosterRow, 0.05f, 0.2f);
+                return;
+            }
+
+            Club.PendingBoosters.Clear();
+            Club.PendingBoosters.AddRange(_picked);
+            Club.Save();
             PlayPressed?.Invoke();
         }
     }

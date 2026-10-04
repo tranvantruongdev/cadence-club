@@ -3,6 +3,7 @@ using CadenceClub.Core;
 using Template.UI;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace CadenceClub.UI
 {
@@ -47,6 +48,20 @@ namespace CadenceClub.UI
             }
 
             return root;
+        }
+
+        /// <summary>Shows a button's icon in its own colours (coin, gem) instead of tinted like the label.</summary>
+        public static Button FullColourIcon(this Button button)
+        {
+            foreach (var image in button.GetComponentsInChildren<Image>(true))
+            {
+                if (image.name == "Icon")
+                {
+                    image.color = Color.white;
+                }
+            }
+
+            return button;
         }
 
         public static Color RarityColor(Rarity rarity) =>

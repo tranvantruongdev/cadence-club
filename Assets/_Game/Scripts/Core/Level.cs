@@ -173,7 +173,8 @@ namespace CadenceClub.Core
         private readonly List<RiderSlot> _squad;
 
         /// <param name="squad">Riders brought into the level, charged as given (empty in the game; tests may pre-charge).</param>
-        public LevelState(LevelDef def, ulong? seed = null, IEnumerable<RiderSlot> squad = null)
+        /// <param name="boosters">Bought before the level: their specials go onto random plain pieces at the start.</param>
+        public LevelState(LevelDef def, ulong? seed = null, IEnumerable<RiderSlot> squad = null, IEnumerable<BoosterDef> boosters = null)
         {
             Def = def ?? throw new ArgumentNullException(nameof(def));
             _rng = new SeededRandom(seed ?? def.seed);
@@ -182,6 +183,29 @@ namespace CadenceClub.Core
             MovesLeft = def.moves;
             _progress = new int[def.goals.Length];
             _squad = squad?.Select(s => new RiderSlot(s.Def, s.Level, s.Charge)).ToList() ?? new List<RiderSlot>();
+            foreach (var booster in boosters ?? Enumerable.Empty<BoosterDef>())
+            {
+                var cells = PowerTargets.PlainPieces(this, _rng, booster.count);
+                for (int i = 0; i < cells.Count; i++)
+                {
+                    bool rocket = booster.special == Special.RocketH || booster.special == Special.RocketV;
+                    var kind = rocket ? (i % 2 == 0 ? Special.RocketH : Special.RocketV) : booster.special;
+                    Board[cells[i]] = Piece.Make(Board[cells[i]].color, kind);
+                }
+            }
+        }
+
+        /// <summary>"+N moves" after running out: the lost level carries on. False unless it was lost.</summary>
+        public bool Continue(int moves)
+        {
+            if (Outcome != LevelOutcome.Lost || moves <= 0)
+            {
+                return false;
+            }
+
+            MovesLeft += moves;
+            Outcome = LevelOutcome.Playing;
+            return true;
         }
 
         private LevelState(LevelState other)

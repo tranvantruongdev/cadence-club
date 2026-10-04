@@ -26,7 +26,9 @@ namespace CadenceClub.UI
         private TextMeshProUGUI _endTitle;
         private TextMeshProUGUI _endBody;
         private GameObject _next;
+        private GameObject _continue;
         private GameObject _retry;
+        private GameObject _home;
         private int _shownMoves = -1;
         private RectTransform _safe;
         private readonly List<Portrait> _portraits = new List<Portrait>();
@@ -34,6 +36,7 @@ namespace CadenceClub.UI
 
         public event Action RetryPressed;
         public event Action NextPressed;
+        public event Action ContinuePressed;
         public event Action HomePressed;
 
         /// <summary>A squad portrait was tapped (slot index).</summary>
@@ -101,24 +104,26 @@ namespace CadenceClub.UI
             var overlay = UiFactory.CreateOverlay(transform);
             overlay.name = "End";
             _end = overlay.gameObject;
-            _endCard = UiFactory.CreateCard(overlay.rectTransform, Vector2.zero, new Vector2(860f, 760f));
-            _endTitle = UiFactory.CreateText(_endCard, "", 88, new Vector2(0f, 250f), new Vector2(780f, 130f), TextAlignmentOptions.Center, UiFont.Display);
+            _endCard = UiFactory.CreateCard(overlay.rectTransform, Vector2.zero, new Vector2(860f, 920f));
+            _endTitle = UiFactory.CreateText(_endCard, "", 88, new Vector2(0f, 330f), new Vector2(780f, 130f), TextAlignmentOptions.Center, UiFont.Display);
             _endTitle.color = theme.ink;
             _endTitle.enableAutoSizing = true; // "Level 30 complete!" is wider than "Out of moves"
             _endTitle.fontSizeMin = 56f;
             _endTitle.fontSizeMax = 88f;
-            _endBody = UiFactory.CreateText(_endCard, "", 46, new Vector2(0f, 85f), new Vector2(760f, 210f));
+            _endBody = UiFactory.CreateText(_endCard, "", 46, new Vector2(0f, 165f), new Vector2(760f, 200f));
             _endBody.color = theme.muted;
             _endBody.enableAutoSizing = true; // up to three lines: moves, rewards, a new rider
             _endBody.fontSizeMin = 30f;
             _endBody.fontSizeMax = 46f;
-            // Same spot: a won level offers the next one, otherwise another try.
-            _next = UiFactory.CreateButton(_endCard, "Next level", new Vector2(0f, -120f), new Vector2(680f, 150f), () => NextPressed?.Invoke(),
+            // ShowEnd stacks whichever of these apply, top down.
+            _next = UiFactory.CreateButton(_endCard, "Next level", Vector2.zero, new Vector2(680f, 140f), () => NextPressed?.Invoke(),
                 ButtonStyle.Primary, theme.iconPlay).gameObject;
-            _retry = UiFactory.CreateButton(_endCard, "Play again", new Vector2(0f, -120f), new Vector2(680f, 150f), () => RetryPressed?.Invoke(),
-                ButtonStyle.Primary, theme.iconRetry).gameObject;
-            UiFactory.CreateButton(_endCard, "Home", new Vector2(0f, -280f), new Vector2(680f, 120f), () => HomePressed?.Invoke(),
-                ButtonStyle.Secondary, theme.iconHome);
+            _continue = UiFactory.CreateButton(_endCard, "+5 moves", Vector2.zero, new Vector2(680f, 140f), () => ContinuePressed?.Invoke(),
+                ButtonStyle.Primary, PieceArt.Coin).FullColourIcon().gameObject;
+            _retry = UiFactory.CreateButton(_endCard, "Play again", Vector2.zero, new Vector2(680f, 120f), () => RetryPressed?.Invoke(),
+                ButtonStyle.Secondary, theme.iconRetry).gameObject;
+            _home = UiFactory.CreateButton(_endCard, "Home", Vector2.zero, new Vector2(680f, 120f), () => HomePressed?.Invoke(),
+                ButtonStyle.Secondary, theme.iconHome).gameObject;
             _end.SetActive(false);
         }
 
@@ -155,17 +160,43 @@ namespace CadenceClub.UI
         }
 
         /// <param name="rewards">The payout or life line under the result, e.g. "+90 coins · +1 star".</param>
-        public void ShowEnd(LevelState state, bool hasNext, string rewards)
+        /// <param name="continueLabel">On a loss, the "+5 moves · 300" offer.</param>
+        public void ShowEnd(LevelState state, bool hasNext, string rewards, string continueLabel = null)
         {
             bool won = state.Outcome == LevelOutcome.Won;
             _next.SetActive(won && hasNext);
+            _continue.SetActive(!won && continueLabel != null);
             _retry.SetActive(!(won && hasNext));
+            _home.SetActive(true);
+            if (continueLabel != null)
+            {
+                _continue.GetComponentInChildren<TextMeshProUGUI>().text = continueLabel;
+            }
+
+            _retry.GetComponentInChildren<TextMeshProUGUI>().text = won ? "Play again" : "Try again";
+            float y = -30f;
+            foreach (var button in new[] { _next, _continue, _retry, _home })
+            {
+                if (button.activeSelf)
+                {
+                    ((RectTransform)button.transform).anchoredPosition = new Vector2(0f, y);
+                    y -= 150f;
+                }
+            }
+
             _endTitle.text = won ? $"Level {state.Def.id} complete!" : "Out of moves";
             _endBody.text = (won
                 ? $"{state.MovesLeft} {(state.MovesLeft == 1 ? "move" : "moves")} to spare"
-                : "So close! Try that board again.") + "\n" + rewards;
+                : "So close!") + "\n" + rewards;
             _end.SetActive(true);
             JuiceFx.Punch(_endCard, 0.08f, 0.3f);
+        }
+
+        /// <summary>Replaces the end card's message (no coins for the offer, no life to play again).</summary>
+        public void ShowEndMessage(string message)
+        {
+            _endBody.text = message;
+            JuiceFx.Punch(_endCard, 0.06f, 0.2f);
         }
 
         public void ShowNoLives(System.TimeSpan nextLife)

@@ -30,6 +30,8 @@ namespace CadenceClub.Core.Tests
             var md = Load();
             CollectionAssert.IsEmpty(md.Validate());
             Assert.AreEqual(12, md.Riders.Count, "12 riders at launch");
+            Assert.AreEqual(3, md.Boosters.Count, "3 pre-level boosters");
+            CollectionAssert.AreEqual(new[] { 20, 25, 30, 35, 40, 45, 50 }, md.DailyGems, "the plan's 20–50 gems a day");
             Assert.IsNotNull(md.Banner(md.Text("banner")), "config names the live banner");
         }
 

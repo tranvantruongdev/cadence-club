@@ -30,6 +30,8 @@ namespace CadenceClub
         private RevealScreen _reveal;
         private RecruitScreen _recruit;
         private RidersScreen _riders;
+        private DailyLoginScreen _daily;
+        private ShopScreen _shop;
         private RectTransform _safe;
         private RectTransform _area;
         private RectTransform _play;
@@ -75,34 +77,47 @@ namespace CadenceClub
             _reveal = RevealScreen.Create(canvas.transform, _stack);
             _recruit = RecruitScreen.Create(canvas.transform, _stack, _reveal);
             _riders = RidersScreen.Create(canvas.transform, _stack);
+            _daily = DailyLoginScreen.Create(canvas.transform, _stack);
+            _shop = ShopScreen.Create(canvas.transform, _stack);
             BuildNav();
             RefreshWallet();
-            if (Club.PendingReveals.Count > 0)
-            {
-                RevealGifts().Forget();
-            }
+            Welcome().Forget();
         }
 
-        /// <summary>The free rider gets the full reveal the first time Home opens after the gift.</summary>
-        private async UniTaskVoid RevealGifts()
+        /// <summary>
+        /// On arrival: a rider granted outside Recruit (the free rider) gets the full reveal, then the daily gift
+        /// opens if today's isn't claimed yet.
+        /// </summary>
+        private async UniTaskVoid Welcome()
         {
-            var gifts = Club.PendingReveals.ToList();
-            Club.PendingReveals.Clear();
             await UniTask.Delay(400);
-            await _reveal.PlayAsync(gifts);
+            if (Club.PendingReveals.Count > 0)
+            {
+                var gifts = Club.PendingReveals.ToList();
+                Club.PendingReveals.Clear();
+                await _reveal.PlayAsync(gifts);
+            }
+
+            if (this != null && Club.Data.CanClaimDaily(Club.Today))
+            {
+                await _daily.OpenAsync();
+            }
         }
 
         private void BuildNav()
         {
             var theme = UiTheme.Current;
             var md = Club.Master;
-            var riders = UiFactory.CreateButton(_safe, "Riders", Vector2.zero, new Vector2(420f, 130f), () => _riders.OpenAsync().Forget(),
+            var riders = UiFactory.CreateButton(_safe, "Riders", Vector2.zero, new Vector2(300f, 130f), () => _riders.OpenAsync().Forget(),
                 ButtonStyle.Secondary, theme.iconTrophy);
-            UiFactory.Place(riders, new Vector2(0.5f, 0f), new Vector2(-225f, 430f));
+            UiFactory.Place(riders, new Vector2(0.5f, 0f), new Vector2(-320f, 430f));
             bool open = Club.Data.RecruitUnlocked(md);
-            var recruit = UiFactory.CreateButton(_safe, open ? "Recruit" : $"Recruit · Lv {md.Int("recruit_after_level") + 1}", Vector2.zero,
-                new Vector2(420f, 130f), () => OpenRecruit(open), open ? ButtonStyle.Primary : ButtonStyle.Secondary, theme.iconStar);
-            UiFactory.Place(recruit, new Vector2(0.5f, 0f), new Vector2(225f, 430f));
+            var recruit = UiFactory.CreateButton(_safe, open ? "Recruit" : $"Lv {md.Int("recruit_after_level") + 1}", Vector2.zero,
+                new Vector2(300f, 130f), () => OpenRecruit(open), open ? ButtonStyle.Primary : ButtonStyle.Secondary, theme.iconStar);
+            UiFactory.Place(recruit, new Vector2(0.5f, 0f), new Vector2(0f, 430f));
+            var shop = UiFactory.CreateButton(_safe, "Shop", Vector2.zero, new Vector2(300f, 130f), () => _shop.OpenAsync().Forget(),
+                ButtonStyle.Secondary, PieceArt.Gem).FullColourIcon();
+            UiFactory.Place(shop, new Vector2(0.5f, 0f), new Vector2(320f, 430f));
         }
 
         private void OpenRecruit(bool open)

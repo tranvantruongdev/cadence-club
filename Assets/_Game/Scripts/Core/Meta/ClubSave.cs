@@ -74,6 +74,67 @@ namespace CadenceClub.Core
         public bool started;
         public bool freeRiderGiven;
 
+        /// <summary>Daily login: claims so far (the next calendar day is claims % 7) and the last day claimed.</summary>
+        public int loginClaims;
+
+        /// <summary>Local calendar day of the last claim, as days since 1970-01-01; -1 before the first.</summary>
+        public int lastLoginDay = -1;
+
+        // ---- Coins: boosters before a level, +5 moves after losing.
+
+        public bool TrySpendCoins(int amount)
+        {
+            if (amount < 0 || coins < amount)
+            {
+                return false;
+            }
+
+            coins -= amount;
+            return true;
+        }
+
+        public int BoostersCost(MasterData md, IEnumerable<string> boosterIds) =>
+            boosterIds.Select(id => md.Boosters.FirstOrDefault(b => b.id == id)).Where(b => b != null).Sum(b => b.cost);
+
+        /// <summary>"+5 moves" on a lost level: pays coins; the level then carries on.</summary>
+        public bool TryBuyContinue(MasterData md) => TrySpendCoins(md.Int("extra_moves_cost"));
+
+        // ---- Daily login: one claim per calendar day, days 1–7 then round again; a missed day doesn't reset it.
+
+        public bool CanClaimDaily(int today) => lastLoginDay != today;
+
+        /// <summary>The calendar day (0–6) the next claim pays.</summary>
+        public int DailyIndex => loginClaims % 7;
+
+        /// <summary>Pays today's gems; 0 if today is already claimed.</summary>
+        public int ClaimDaily(MasterData md, int today)
+        {
+            if (!CanClaimDaily(today) || md.DailyGems.Count == 0)
+            {
+                return 0;
+            }
+
+            int gemsToday = md.DailyGems[DailyIndex % md.DailyGems.Count];
+            gems += gemsToday;
+            loginClaims++;
+            lastLoginDay = today;
+            return gemsToday;
+        }
+
+        // ---- Demo shop: gem packs that cost nothing in this build ("no real purchases").
+
+        public int ClaimShopItem(MasterData md, string itemId)
+        {
+            var item = md.Shop.FirstOrDefault(s => s.id == itemId);
+            if (item == null)
+            {
+                return 0;
+            }
+
+            gems += item.gems;
+            return item.gems;
+        }
+
         /// <summary>First launch: the starting gems and full lives.</summary>
         public void StartIfNew(MasterData md)
         {

@@ -73,6 +73,25 @@ namespace CadenceClub.Core
         public string story;
     }
 
+    public sealed class BoosterDef
+    {
+        public string id;
+        public string name;
+
+        /// <summary>What it places. A rocket alternates horizontal and vertical.</summary>
+        public Special special;
+
+        public int count;
+        public int cost;
+    }
+
+    public sealed class ShopItemDef
+    {
+        public string id;
+        public string label;
+        public int gems;
+    }
+
     public sealed class TaskDef
     {
         public string id;
@@ -87,7 +106,19 @@ namespace CadenceClub.Core
     /// </summary>
     public sealed class MasterData
     {
-        public static readonly string[] Tables = { "config", "riders", "rate_tables", "banners", "rarities", "rider_levels", "areas", "renovation" };
+        public static readonly string[] Tables =
+        {
+            "config", "riders", "rate_tables", "banners", "rarities", "rider_levels", "areas", "renovation", "boosters", "daily_login", "shop",
+        };
+
+        /// <summary>Pre-level boosters bought with coins: specials placed on the board when the level starts.</summary>
+        public readonly List<BoosterDef> Boosters = new List<BoosterDef>();
+
+        /// <summary>Gems for each day of the 7-day login calendar (index 0 = day 1).</summary>
+        public readonly List<int> DailyGems = new List<int>();
+
+        /// <summary>Demo shop: gem packs that cost nothing (no real purchases in this build).</summary>
+        public readonly List<ShopItemDef> Shop = new List<ShopItemDef>();
 
         public readonly List<RiderDef> Riders = new List<RiderDef>();
         public readonly List<BannerDef> Banners = new List<BannerDef>();
@@ -177,6 +208,28 @@ namespace CadenceClub.Core
                 md.Tasks.Add(new TaskDef { id = row["task"], area = md.Number(row, "area"), name = row["name"], stars = md.Number(row, "stars") });
             }
 
+            foreach (var row in md.Rows(read, "boosters", "id", "name", "special", "count", "cost"))
+            {
+                md.Boosters.Add(new BoosterDef
+                {
+                    id = row["id"],
+                    name = row["name"],
+                    special = md.ParseEnum<Special>(row, "special"),
+                    count = md.Number(row, "count"),
+                    cost = md.Number(row, "cost"),
+                });
+            }
+
+            foreach (var row in md.Rows(read, "daily_login", "day", "gems").OrderBy(r => r["day"]))
+            {
+                md.DailyGems.Add(md.Number(row, "gems"));
+            }
+
+            foreach (var row in md.Rows(read, "shop", "id", "label", "gems"))
+            {
+                md.Shop.Add(new ShopItemDef { id = row["id"], label = row["label"], gems = md.Number(row, "gems") });
+            }
+
             return md;
         }
 
@@ -255,6 +308,24 @@ namespace CadenceClub.Core
             foreach (var a in Areas)
             {
                 Check(Tasks.Count(t => t.area == a.id) == 6, $"areas: {a.name} has {Tasks.Count(t => t.area == a.id)} tasks, not 6");
+            }
+
+            foreach (var b in Boosters)
+            {
+                Check(b.special != Special.None, $"boosters: {b.id} places no special");
+                Check(b.count >= 1 && b.count <= 5, $"boosters: {b.id} count {b.count} must be 1–5");
+                Check(b.cost > 0, $"boosters: {b.id} must cost coins");
+            }
+
+            Check(DailyGems.Count == 7 && DailyGems.All(g => g > 0), "daily_login: needs gems for days 1–7");
+            foreach (var item in Shop)
+            {
+                Check(item.gems > 0, $"shop: {item.id} must give gems");
+            }
+
+            foreach (var key in new[] { "extra_moves", "extra_moves_cost" })
+            {
+                Check(Int(key) > 0, $"config: {key} must be a positive number");
             }
 
             return problems;

@@ -16,7 +16,11 @@ namespace CadenceClub.Core.Tests
             var tables = new Dictionary<string, string>
             {
                 ["config"] = "key,value\nstart_gems,500\nlives_max,5\nlife_seconds,60\nwin_coins,50\ncoins_per_move_left,10\narea_gems,300\n" +
-                             "pull_cost,100\nten_pull_cost,1000\nbanner,b\nfree_rider,r1\nfree_rider_after_level,3\nrecruit_after_level,5",
+                             "pull_cost,100\nten_pull_cost,1000\nbanner,b\nfree_rider,r1\nfree_rider_after_level,3\nrecruit_after_level,5\n" +
+                             "extra_moves,5\nextra_moves_cost,300",
+                ["boosters"] = "id,name,special,count,cost\nrockets,Rockets,RocketH,2,150\nbomb,Bomb,Bomb,1,200\ndisco,Disco,Disco,1,350",
+                ["daily_login"] = "day,gems\n1,20\n2,25\n3,30\n4,35\n5,40\n6,45\n7,50",
+                ["shop"] = "id,label,gems\nhandful,Handful,100",
                 ["riders"] = "id,name,role,rarity,color,power,charge,power_by_level\n" +
                              "r1,Rider One,Sprinter,R,0,RowRockets,22,1;1;2;2;2\nr2,Rider Two,Climber,R,1,ColumnRockets,22,1;1;2;2;2\n" +
                              "s1,Super One,Mechanic,SR,2,BreakObstacles,18,5;5;6;6;7\ns2,Super Two,Rouleur,SR,3,MakeSpecials,18,5;5;6;6;7\n" +
@@ -224,6 +228,79 @@ namespace CadenceClub.Core.Tests
             Assert.AreEqual(10, ten.Count);
             Assert.AreEqual(0, save.gems);
             Assert.AreEqual(10, ten.Count(o => o.grant.isNew) + ten.Count(o => o.grant.shards > 0), "each pull is a new rider or shards");
+        }
+
+        [Test]
+        public void Boosters_place_their_specials_on_a_settled_board()
+        {
+            var md = Md();
+            var def = LevelDef.Rectangle(8, 8, 5, 20, LevelDef.Collect(0, 30));
+            var state = new LevelState(def, 4, null, md.Boosters);
+            var specials = Enumerable.Range(0, 8).SelectMany(y => Enumerable.Range(0, 8).Select(x => state.Board[x, y].special))
+                .Where(s => s != Special.None).ToList();
+            CollectionAssert.AreEquivalent(new[] { Special.RocketH, Special.RocketV, Special.Bomb, Special.Disco }, specials,
+                "2 rockets (one each way), a bomb and a disco piece");
+            Assert.AreEqual(0, MatchFinder.Find(state.Board).Count, "placing them makes no match");
+            Assert.IsTrue(MoveFinder.HasMove(state.Board));
+        }
+
+        [Test]
+        public void Five_more_moves_carry_a_lost_level_on()
+        {
+            var state = new LevelState(LevelDef.Rectangle(6, 6, 4, 2, LevelDef.Collect(0, 999)), 1);
+            Assert.IsFalse(state.Continue(5), "only a lost level can continue");
+            var bot = new Bot(BotKind.Greedy, new SeededRandom(1));
+            while (state.Outcome == LevelOutcome.Playing)
+            {
+                var move = bot.Choose(state).Value;
+                state.TryMove(move.a, move.b, new List<BoardEvent>());
+            }
+
+            Assert.AreEqual(LevelOutcome.Lost, state.Outcome);
+            Assert.IsTrue(state.Continue(5));
+            Assert.AreEqual((LevelOutcome.Playing, 5), (state.Outcome, state.MovesLeft));
+            var next = bot.Choose(state).Value;
+            Assert.IsTrue(state.TryMove(next.a, next.b, new List<BoardEvent>()), "play goes on");
+        }
+
+        [Test]
+        public void Coins_pay_for_boosters_and_a_continue_only_when_they_cover_it()
+        {
+            var md = Md();
+            var save = new ClubSave { coins = 400 };
+            Assert.AreEqual(350, save.BoostersCost(md, new[] { "rockets", "bomb" }));
+            Assert.IsTrue(save.TrySpendCoins(350));
+            Assert.IsFalse(save.TryBuyContinue(md), "50 coins don't cover +5 moves (300)");
+            save.coins = 300;
+            Assert.IsTrue(save.TryBuyContinue(md));
+            Assert.AreEqual(0, save.coins);
+        }
+
+        [Test]
+        public void Daily_login_pays_once_a_day_through_a_seven_day_calendar()
+        {
+            var md = Md();
+            var save = new ClubSave();
+            var paid = new List<int>();
+            for (int day = 100; day < 109; day += 1)
+            {
+                paid.Add(save.ClaimDaily(md, day));
+                Assert.AreEqual(0, save.ClaimDaily(md, day), $"day {day}: a second claim pays nothing");
+            }
+
+            CollectionAssert.AreEqual(new[] { 20, 25, 30, 35, 40, 45, 50, 20, 25 }, paid, "day 8 starts the calendar again");
+            Assert.AreEqual(290, save.gems);
+            Assert.AreEqual(30, save.ClaimDaily(md, 200), "a gap of days doesn't reset it: the next claim is day 3 (30 gems)");
+        }
+
+        [Test]
+        public void The_demo_shop_gives_gems()
+        {
+            var md = Md();
+            var save = new ClubSave();
+            Assert.AreEqual(100, save.ClaimShopItem(md, "handful"));
+            Assert.AreEqual(0, save.ClaimShopItem(md, "unknown"));
+            Assert.AreEqual(100, save.gems);
         }
 
         [Test]

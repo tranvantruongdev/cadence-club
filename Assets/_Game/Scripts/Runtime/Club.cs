@@ -36,6 +36,12 @@ namespace CadenceClub
 
         public static long Now => DateTime.UtcNow.Ticks;
 
+        /// <summary>Today on the player's calendar, as days since 1970-01-01 (the daily gift resets at local midnight).</summary>
+        public static int Today => (int)(DateTime.Now.Date - new DateTime(1970, 1, 1)).TotalDays;
+
+        /// <summary>Boosters bought on the level start popup, placed on the board by the level that starts next.</summary>
+        public static readonly System.Collections.Generic.List<string> PendingBoosters = new System.Collections.Generic.List<string>();
+
         /// <summary>Riders granted outside Recruit (the free rider after a level) that Home still has to reveal.</summary>
         public static readonly System.Collections.Generic.List<PullOutcome> PendingReveals = new System.Collections.Generic.List<PullOutcome>();
 
