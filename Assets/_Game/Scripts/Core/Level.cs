@@ -1,0 +1,191 @@
+using System;
+using System.Collections.Generic;
+using Template.Core.Random;
+
+namespace CadenceClub.Core
+{
+    public enum GoalKind
+    {
+        /// <summary>Clear <c>count</c> pieces of <c>color</c>.</summary>
+        Collect,
+    }
+
+    [Serializable]
+    public struct Goal
+    {
+        public GoalKind kind;
+        public int color;
+        public int count;
+    }
+
+    /// <summary>What a level is: board shape, colours, move limit, goals, seed. Saved as one JSON file per level.</summary>
+    [Serializable]
+    public sealed class LevelDef
+    {
+        public int id;
+
+        /// <summary>Rows top to bottom: '.' playable, '#' hole.</summary>
+        public string[] shape;
+
+        public int colors = 4;
+        public int moves = 25;
+        public Goal[] goals = Array.Empty<Goal>();
+        public ulong seed = 1;
+
+        public int Width => shape[0].Length;
+        public int Height => shape.Length;
+
+        public bool[] Playable()
+        {
+            var playable = new bool[Width * Height];
+            for (int row = 0; row < Height; row++)
+            {
+                int y = Height - 1 - row;
+                for (int x = 0; x < Width; x++)
+                {
+                    playable[y * Width + x] = shape[row][x] != '#';
+                }
+            }
+
+            return playable;
+        }
+
+        /// <summary>A plain rectangle, for tests and quick prototypes.</summary>
+        public static LevelDef Rectangle(int width, int height, int colors, int moves, params Goal[] goals)
+        {
+            var rows = new string[height];
+            for (int i = 0; i < height; i++)
+            {
+                rows[i] = new string('.', width);
+            }
+
+            return new LevelDef { shape = rows, colors = colors, moves = moves, goals = goals };
+        }
+
+        public static Goal Collect(int color, int count) => new Goal { kind = GoalKind.Collect, color = color, count = count };
+    }
+
+    public enum LevelOutcome
+    {
+        Playing,
+        Won,
+        Lost,
+    }
+
+    /// <summary>One play of a level: the board, moves left, goal progress and the outcome. Pure C#, cloneable for the bot.</summary>
+    public sealed class LevelState
+    {
+        private readonly SeededRandom _rng;
+        private readonly MoveResolver _resolver;
+        private readonly int[] _progress;
+
+        public LevelState(LevelDef def, ulong? seed = null)
+        {
+            Def = def ?? throw new ArgumentNullException(nameof(def));
+            _rng = new SeededRandom(seed ?? def.seed);
+            _resolver = new MoveResolver(def.colors, _rng);
+            Board = BoardGenerator.Generate(def.Width, def.Height, def.Playable(), def.colors, _rng);
+            MovesLeft = def.moves;
+            _progress = new int[def.goals.Length];
+        }
+
+        private LevelState(LevelState other)
+        {
+            Def = other.Def;
+            _rng = new SeededRandom(other._rng.Save());
+            _resolver = new MoveResolver(Def.colors, _rng);
+            Board = other.Board.Clone();
+            MovesLeft = other.MovesLeft;
+            MovesUsed = other.MovesUsed;
+            Outcome = other.Outcome;
+            _progress = (int[])other._progress.Clone();
+        }
+
+        public LevelDef Def { get; }
+        public Board Board { get; }
+        public int MovesLeft { get; private set; }
+        public int MovesUsed { get; private set; }
+        public LevelOutcome Outcome { get; private set; }
+
+        public int Progress(int goal) => _progress[goal];
+
+        public int Remaining(int goal) => Math.Max(0, Def.goals[goal].count - _progress[goal]);
+
+        /// <summary>Remaining pieces of a colour still needed by Collect goals (0 if that colour isn't a goal).</summary>
+        public int NeededOf(int color)
+        {
+            int needed = 0;
+            for (int i = 0; i < Def.goals.Length; i++)
+            {
+                if (Def.goals[i].kind == GoalKind.Collect && Def.goals[i].color == color)
+                {
+                    needed += Remaining(i);
+                }
+            }
+
+            return needed;
+        }
+
+        public LevelState Clone() => new LevelState(this);
+
+        /// <summary>Plays one move. Returns false if the swap is invalid (no move used) or the level is over.</summary>
+        public bool TryMove(Cell a, Cell b, List<BoardEvent> events)
+        {
+            if (Outcome != LevelOutcome.Playing)
+            {
+                return false;
+            }
+
+            int start = events.Count;
+            if (!_resolver.TryMove(Board, a, b, events))
+            {
+                return false;
+            }
+
+            MovesLeft--;
+            MovesUsed++;
+            for (int i = start; i < events.Count; i++)
+            {
+                if (events[i].type == BoardEventType.Cleared)
+                {
+                    Count(events[i].piece);
+                }
+            }
+
+            if (AllGoalsMet())
+            {
+                Outcome = LevelOutcome.Won;
+            }
+            else if (MovesLeft <= 0)
+            {
+                Outcome = LevelOutcome.Lost;
+            }
+
+            return true;
+        }
+
+        private void Count(Piece cleared)
+        {
+            for (int g = 0; g < Def.goals.Length; g++)
+            {
+                if (Def.goals[g].kind == GoalKind.Collect && Def.goals[g].color == cleared.color && _progress[g] < Def.goals[g].count)
+                {
+                    _progress[g]++;
+                }
+            }
+        }
+
+        private bool AllGoalsMet()
+        {
+            for (int g = 0; g < Def.goals.Length; g++)
+            {
+                if (_progress[g] < Def.goals[g].count)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+    }
+}

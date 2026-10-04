@@ -1,0 +1,175 @@
+using System;
+using System.Collections.Generic;
+using Template.Core.Random;
+
+namespace CadenceClub.Core
+{
+    public enum BotKind
+    {
+        /// <summary>Takes the move whose match helps the goals most, like a focused player.</summary>
+        Greedy,
+
+        /// <summary>Takes any valid move, like a casual player.</summary>
+        Random,
+    }
+
+    /// <summary>
+    /// Picks moves for simulation. The greedy bot scores each valid move by its first match only (one MatchFinder
+    /// pass per candidate, no full resolve), so thousands of games run in seconds.
+    /// </summary>
+    public sealed class Bot
+    {
+        private readonly BotKind _kind;
+        private readonly SeededRandom _rng;
+        private readonly List<(Cell a, Cell b)> _best = new List<(Cell a, Cell b)>();
+
+        public Bot(BotKind kind, SeededRandom rng)
+        {
+            _kind = kind;
+            _rng = rng ?? throw new ArgumentNullException(nameof(rng));
+        }
+
+        public (Cell a, Cell b)? Choose(LevelState state)
+        {
+            var moves = MoveFinder.FindAll(state.Board);
+            if (moves.Count == 0)
+            {
+                return null;
+            }
+
+            if (_kind == BotKind.Random)
+            {
+                return moves[_rng.Range(0, moves.Count)];
+            }
+
+            int bestScore = int.MinValue;
+            _best.Clear();
+            foreach (var move in moves)
+            {
+                int score = Score(state, move.a, move.b);
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    _best.Clear();
+                }
+
+                if (score == bestScore)
+                {
+                    _best.Add(move);
+                }
+            }
+
+            return _best[_rng.Range(0, _best.Count)];
+        }
+
+        private static int Score(LevelState state, Cell a, Cell b)
+        {
+            var board = state.Board;
+            var pa = board[a];
+            var pb = board[b];
+            if (pa.special == Special.Disco || pb.special == Special.Disco)
+            {
+                var other = pa.special == Special.Disco ? pb : pa;
+                return 60 + 4 * state.NeededOf(other.color);
+            }
+
+            if (pa.IsSpecial && pb.IsSpecial)
+            {
+                return 50;
+            }
+
+            MoveResolver.Swap(board, a, b);
+            var groups = MatchFinder.Find(board, a, b);
+            int score = 0;
+            foreach (var g in groups)
+            {
+                score += g.cells.Count + 3 * Math.Min(g.cells.Count, state.NeededOf(g.color));
+                score += g.creates == Special.Disco ? 20
+                    : g.creates == Special.Bomb ? 12
+                    : g.creates == Special.RocketH || g.creates == Special.RocketV ? 10
+                    : g.creates == Special.Glider ? 8
+                    : 0;
+                foreach (var c in g.cells)
+                {
+                    if (board[c].IsSpecial)
+                    {
+                        score += 8; // sets off a special already on the board
+                    }
+                }
+            }
+
+            MoveResolver.Swap(board, a, b);
+
+            // Matches low on the board shake more pieces loose, so they cascade more.
+            score += (board.Height - Math.Min(a.y, b.y)) / 3;
+            return score;
+        }
+    }
+
+    public struct SimResult
+    {
+        public int runs;
+        public int wins;
+        public double averageMovesLeftOnWin;
+
+        /// <summary>Average share of the goals completed, 0..1 (how close the losses came).</summary>
+        public double averageGoalCompletion;
+
+        public double WinRate => runs == 0 ? 0 : (double)wins / runs;
+
+        public override string ToString() =>
+            $"{wins}/{runs} won ({WinRate:P0}), {averageMovesLeftOnWin:0.0} moves left on wins, {averageGoalCompletion:P0} of goals on average";
+    }
+
+    /// <summary>Monte Carlo difficulty check: plays a level many times with different seeds and reports the win rate.</summary>
+    public static class LevelSimulator
+    {
+        public static SimResult Run(LevelDef def, int runs, BotKind kind, ulong firstSeed = 1)
+        {
+            var result = new SimResult { runs = runs };
+            long movesLeft = 0;
+            double completion = 0;
+            var events = new List<BoardEvent>();
+            for (int i = 0; i < runs; i++)
+            {
+                ulong seed = firstSeed + (ulong)i;
+                var state = new LevelState(def, seed);
+                var bot = new Bot(kind, new SeededRandom(seed, 7UL));
+                while (state.Outcome == LevelOutcome.Playing)
+                {
+                    var move = bot.Choose(state);
+                    events.Clear();
+                    if (!move.HasValue || !state.TryMove(move.Value.a, move.Value.b, events))
+                    {
+                        break; // can't happen: the resolver always leaves a valid move
+                    }
+                }
+
+                if (state.Outcome == LevelOutcome.Won)
+                {
+                    result.wins++;
+                    movesLeft += state.MovesLeft;
+                }
+
+                completion += Completion(state);
+            }
+
+            result.averageMovesLeftOnWin = result.wins > 0 ? (double)movesLeft / result.wins : 0;
+            result.averageGoalCompletion = runs > 0 ? completion / runs : 0;
+            return result;
+        }
+
+        private static double Completion(LevelState state)
+        {
+            int needed = 0;
+            int done = 0;
+            for (int g = 0; g < state.Def.goals.Length; g++)
+            {
+                needed += state.Def.goals[g].count;
+                done += state.Progress(g);
+            }
+
+            return needed == 0 ? 1 : (double)done / needed;
+        }
+    }
+}
