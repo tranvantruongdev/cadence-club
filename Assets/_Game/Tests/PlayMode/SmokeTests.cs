@@ -17,9 +17,10 @@ using UnityEngine.TestTools;
 namespace CadenceClub.PlayModeTests
 {
     /// <summary>
-    /// End-to-end check of the real game: boot, title, the Game scene, then the greedy bot plays moves through the
-    /// actual <see cref="LevelController"/> until the level ends — level 1, then the obstacle level. Fails on any
-    /// logged error, and on the board view drifting from the Core board (the view's resync warning).
+    /// End-to-end check of the real game from a fresh save: the first session (boot into level 1, level 3, Home), the
+    /// meta screens, then the greedy bot plays moves through the actual <see cref="LevelController"/> until the level
+    /// ends — level 1 with boosters, then the obstacle level. Fails on any logged error, and on the board view drifting
+    /// from the Core board (the view's resync warning).
     /// Screenshots go to Logs/screenshots.
     /// </summary>
     public class SmokeTests
@@ -46,29 +47,58 @@ namespace CadenceClub.PlayModeTests
                 Directory.Delete(shots, true); // a lost level writes "-lost": an old "-won" shot would mislead
             }
 
+            // Start from a fresh save, like a first install (and like CI); the developer's save files go back afterwards.
+            string savePath = new Template.Infra.Save.FileSaveStore().FilePath;
+            var keptSave = new[] { savePath, savePath + ".tmp", savePath + ".bak" }.Where(File.Exists).ToDictionary(p => p, p => File.ReadAllBytes(p));
+            foreach (var path in keptSave.Keys)
+            {
+                File.Delete(path);
+            }
+
             try
             {
+                // First session: a new player boots straight into level 1, and a fingertip shows the first swap.
                 SceneManager.LoadScene("Boot");
+                yield return WaitForScene("Game", 20f);
+                yield return new WaitForSeconds(2f);
+                var controller = Object.FindAnyObjectByType<LevelController>();
+                var board = (BoardView)typeof(LevelController).GetField("_board", Private).GetValue(controller);
+                Assert.AreEqual(1, State(controller).Def.id, "a new player starts in level 1");
+                Assert.IsTrue(board.IsHinting && board.transform.Find("Finger").gameObject.activeSelf, "the first session shows a fingertip hint at once");
+                Capture("first-level1-finger");
+                yield return PlayToEnd(controller, "first-level1");
+                Assert.AreEqual(LevelOutcome.Won, State(controller).Outcome, "the bot wins level 1's designed board");
+                AssertWinCardOnlyLeadsOn(controller, "Next level");
+
+                // Level 3, as if level 2 were won: its designed board opens on a bomb, and winning it leads Home.
+                Club.Data.level = 3;
+                typeof(LevelController).GetMethod("Play", Private).Invoke(controller, new object[] { 3 });
+                yield return new WaitForSeconds(2f);
+                Capture("first-level3-hint");
+                yield return PlayToEnd(controller, "first-level3");
+                Assert.AreEqual(LevelOutcome.Won, State(controller).Outcome, "the bot wins level 3's designed board");
+                AssertWinCardOnlyLeadsOn(controller, "Continue");
+                typeof(LevelController).GetMethod("NextLevel", Private).Invoke(controller, null);
                 yield return WaitForScene("Title", 20f);
                 yield return new WaitForSeconds(0.6f);
                 Capture("0-title");
 
                 var home = Object.FindAnyObjectByType<HomeController>();
-                Assert.IsNotNull(home, "Home opens after boot");
+                Assert.IsNotNull(home, "Home opens after the first session");
                 var homeClub = Club.Data;
                 var homeMd = Club.Master;
                 var stack = (Template.UI.ScreenStack)typeof(HomeController).GetField("_stack", Private).GetValue(home);
 
-                // The daily gift opens on arrival when today's isn't claimed; a second run on the same day opens it by hand.
+                // Home greets with the free rider's reveal, then the daily gift.
+                var freeReveal = (CadenceClub.UI.RevealScreen)typeof(HomeController).GetField("_reveal", Private).GetValue(home);
+                Assert.AreSame(freeReveal, stack.Top, "the free rider from level 3 is revealed on arrival");
+                freeReveal.Skip();
+                yield return new WaitForSeconds(0.6f);
+                Capture("first-free-rider");
+                typeof(CadenceClub.UI.RevealScreen).GetMethod("Close", Private).Invoke(freeReveal, null);
                 yield return new WaitForSeconds(0.6f);
                 var daily = (CadenceClub.UI.DailyLoginScreen)typeof(HomeController).GetField("_daily", Private).GetValue(home);
-                if (stack.Top != daily)
-                {
-                    homeClub.lastLoginDay = -1;
-                    daily.OpenAsync().Forget();
-                    yield return new WaitForSeconds(0.6f);
-                }
-
+                Assert.AreSame(daily, stack.Top, "the daily gift opens after the reveal");
                 Capture("0-daily-gift");
                 int gemsBeforeGift = homeClub.gems;
                 typeof(CadenceClub.UI.DailyLoginScreen).GetMethod("Claim", Private).Invoke(daily, null);
@@ -76,6 +106,8 @@ namespace CadenceClub.PlayModeTests
                 yield return new WaitForSeconds(0.4f);
                 Capture("0-daily-claimed");
                 yield return stack.PopAsync().ToCoroutine();
+                Assert.IsNotNull(GameObject.Find("Pointer"), "nothing built yet: a fingertip points at the first task");
+                Capture("first-home-pointer");
 
                 // Home: build a renovation task with a star.
                 var task = homeMd.Tasks.FirstOrDefault(t => !homeClub.IsBuilt(t.id) && t.area == homeClub.CurrentArea(homeMd).id);
@@ -85,6 +117,8 @@ namespace CadenceClub.PlayModeTests
                     int built = homeClub.built.Count;
                     typeof(HomeController).GetMethod("Build", Private).Invoke(home, new object[] { task });
                     Assert.AreEqual(built + 1, homeClub.built.Count, "a ★ builds the task");
+                    yield return null; // the old area is destroyed at the end of the frame
+                    Assert.IsNull(GameObject.Find("Pointer"), "the pointer goes once something is built");
                     yield return new WaitForSeconds(0.6f);
                     Capture("0a-home-built");
                 }
@@ -146,14 +180,14 @@ namespace CadenceClub.PlayModeTests
                 Assert.AreEqual(coinsBeforeBoosters - homeClub.BoostersCost(homeMd, new[] { "rockets", "bomb" }), homeClub.coins, "Play pays for the boosters");
                 yield return WaitForScene("Game", 20f);
                 yield return new WaitForSeconds(0.6f);
-                var controller = Object.FindAnyObjectByType<LevelController>();
+                controller = Object.FindAnyObjectByType<LevelController>();
                 var startBoard = State(controller).Board;
                 int specials = Enumerable.Range(0, startBoard.Height).Sum(y => Enumerable.Range(0, startBoard.Width).Count(x => startBoard[x, y].IsSpecial));
                 Assert.GreaterOrEqual(specials, 3, "the 2 rockets and the bomb start on the board");
                 Capture("level1-start");
 
                 // Nobody moves for 5 s: the board hints a move.
-                var board = (BoardView)typeof(LevelController).GetField("_board", Private).GetValue(controller);
+                board = (BoardView)typeof(LevelController).GetField("_board", Private).GetValue(controller);
                 yield return new WaitForSeconds(5.5f);
                 Assert.IsTrue(board.IsHinting, "a hint should show after 5 s without a move");
                 Capture("level1-hint");
@@ -230,7 +264,26 @@ namespace CadenceClub.PlayModeTests
             {
                 Levels.Override = null;
                 Application.logMessageReceived -= OnLog;
+                foreach (var path in new[] { savePath, savePath + ".tmp", savePath + ".bak" }.Where(File.Exists))
+                {
+                    File.Delete(path);
+                }
+
+                foreach (var kept in keptSave)
+                {
+                    File.WriteAllBytes(kept.Key, kept.Value);
+                }
             }
+        }
+
+        /// <summary>First-session win card: one button on (labelled <paramref name="next"/>), no Home.</summary>
+        private static void AssertWinCardOnlyLeadsOn(LevelController controller, string next)
+        {
+            var hud = typeof(LevelController).GetField("_hud", Private).GetValue(controller);
+            GameObject Button(string field) => (GameObject)hud.GetType().GetField(field, Private).GetValue(hud);
+            var label = Button("_next").GetComponentsInChildren<Component>().First(c => c.GetType().Name == "TextMeshProUGUI");
+            Assert.IsTrue(Button("_next").activeSelf && !Button("_home").activeSelf && !Button("_retry").activeSelf, "the win card only leads on");
+            Assert.AreEqual(next, label.GetType().GetProperty("text").GetValue(label));
         }
 
         private static LevelState State(LevelController controller) =>

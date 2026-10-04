@@ -450,9 +450,12 @@ namespace CadenceClub.UI
             UiFactory.Place(done, new Vector2(0.5f, 0.5f), new Vector2(0f, -430f));
         }
 
-        private void Close()
+        private void Close() => CloseAsync().Forget();
+
+        /// <summary>Signals the end only once the pop is done: the stack drops a push (Home's daily gift) made mid-pop.</summary>
+        private async UniTaskVoid CloseAsync()
         {
-            _stack.PopAsync().Forget();
+            await _stack.PopAsync();
             _closed?.TrySetResult();
         }
 

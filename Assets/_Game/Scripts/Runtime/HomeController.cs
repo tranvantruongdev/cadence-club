@@ -183,6 +183,8 @@ namespace CadenceClub
                 UiFactory.CreateRounded(_area, new Vector2(-440f + width * 0.5f, 240f), new Vector2(width, 22f), theme.accent, 11);
             }
 
+            // First-session script: until anything is built, a fingertip points at the first task the player can afford.
+            var firstTask = club.built.Count == 0 ? tasks.FirstOrDefault(t => !club.IsBuilt(t.id) && club.stars >= t.stars) : null;
             for (int i = 0; i < tasks.Count; i++)
             {
                 var tile = BuildTask(tasks[i], new Vector2(i % 2 == 0 ? -232f : 232f, 90f - (i / 2) * 220f));
@@ -191,6 +193,25 @@ namespace CadenceClub
                     tile.localScale = Vector3.one * 0.6f;
                     Tween.Scale(tile, 1f, 0.45f, Ease.OutBack);
                 }
+
+                if (tasks[i] == firstTask)
+                {
+                    Pointer(tile, new Vector2(165f, -80f)); // just right of the Build button
+                }
+            }
+        }
+
+        private static void Pointer(RectTransform parent, Vector2 at)
+        {
+            var pointer = UiFactory.CreateRect("Pointer", parent);
+            pointer.anchorMin = pointer.anchorMax = new Vector2(0.5f, 0.5f);
+            pointer.anchoredPosition = at;
+            pointer.sizeDelta = new Vector2(100f, 100f);
+            UiFactory.CreateImage(pointer, PieceArt.Disc, Vector2.zero, new Vector2(100f, 100f), new Color(0.07f, 0.11f, 0.18f, 0.85f));
+            UiFactory.CreateImage(pointer, PieceArt.Disc, Vector2.zero, new Vector2(78f, 78f), Color.white);
+            if (!JuiceFx.ReduceMotion)
+            {
+                Tween.LocalPositionY(pointer, pointer.localPosition.y + 30f, 0.5f, Ease.InOutSine, cycles: -1, cycleMode: CycleMode.Yoyo);
             }
         }
 

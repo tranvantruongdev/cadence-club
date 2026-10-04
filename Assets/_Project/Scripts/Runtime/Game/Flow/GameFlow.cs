@@ -45,7 +45,7 @@ namespace Template.Game.Flow
         private void Awake()
         {
             _states = new StateMachine<AppState>(AppState.Boot)
-                .Allow(AppState.Boot, AppState.Title)
+                .Allow(AppState.Boot, AppState.Title, AppState.Game)
                 .Allow(AppState.Title, AppState.Game)
                 .Allow(AppState.Game, AppState.Title, AppState.Game);
 

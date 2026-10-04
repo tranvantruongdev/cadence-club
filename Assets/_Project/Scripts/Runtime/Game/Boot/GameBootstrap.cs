@@ -19,6 +19,12 @@ namespace Template.Game.Boot
     /// </summary>
     public sealed class GameBootstrap : MonoBehaviour
     {
+        /// <summary>
+        /// Where boot hands over, asked once the save is loaded. A game sets it (RuntimeInitializeOnLoadMethod) to send
+        /// a first-time player straight into play.
+        /// </summary>
+        public static System.Func<AppState> FirstState = () => AppState.Title;
+
         private void Start() => Run().Forget();
 
         private async UniTaskVoid Run()
@@ -44,7 +50,7 @@ namespace Template.Game.Boot
 
             var flow = GameFlow.Create();
             Services.Register(flow);
-            await flow.GoToAsync(AppState.Title);
+            await flow.GoToAsync(FirstState());
         }
 
         /// <summary>Short generated sounds and a light haptic tick, so every screen feels tactile with no audio files.</summary>

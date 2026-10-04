@@ -17,7 +17,7 @@ namespace CadenceClub.Core.Tests
             {
                 ["config"] = "key,value\nstart_gems,500\nlives_max,5\nlife_seconds,60\nwin_coins,50\ncoins_per_move_left,10\narea_gems,300\n" +
                              "pull_cost,100\nten_pull_cost,1000\nbanner,b\nfree_rider,r1\nfree_rider_after_level,3\nrecruit_after_level,5\n" +
-                             "extra_moves,5\nextra_moves_cost,300",
+                             "extra_moves,5\nextra_moves_cost,300\nhome_after_level,3",
                 ["boosters"] = "id,name,special,count,cost\nrockets,Rockets,RocketH,2,150\nbomb,Bomb,Bomb,1,200\ndisco,Disco,Disco,1,350",
                 ["daily_login"] = "day,gems\n1,20\n2,25\n3,30\n4,35\n5,40\n6,45\n7,50",
                 ["shop"] = "id,label,gems\nhandful,Handful,100",
@@ -274,6 +274,20 @@ namespace CadenceClub.Core.Tests
             save.coins = 300;
             Assert.IsTrue(save.TryBuyContinue(md));
             Assert.AreEqual(0, save.coins);
+        }
+
+        [Test]
+        public void The_first_session_lasts_until_its_last_level_is_won()
+        {
+            var md = Md();
+            var save = new ClubSave();
+            var inFirstSession = Enumerable.Range(1, 5).Select(level =>
+            {
+                save.level = level; // the next level to play
+                return save.InFirstSession(md);
+            });
+            CollectionAssert.AreEqual(new[] { true, true, true, false, false }, inFirstSession.ToList());
+            Assert.IsFalse(save.InFirstSession(MasterData.Parse(_ => null)), "no home_after_level: no scripted session");
         }
 
         [Test]

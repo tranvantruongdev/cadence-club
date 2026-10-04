@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
 using NUnit.Framework;
+using Template.Core.Random;
 
 namespace CadenceClub.Core.Tests
 {
@@ -37,10 +38,40 @@ namespace CadenceClub.Core.Tests
             CollectionAssert.AreEqual(Numbers().Select(n => $"level_{n:00}.json"), files);
         }
 
+        private static LevelDef Load(int number) =>
+            JsonConvert.DeserializeObject<LevelDef>(File.ReadAllText(Path.Combine(Folder(), $"level_{number:00}.json")));
+
+        /// <summary>
+        /// The first session plays levels on their file's seed, with the greedy bot as the hint: level 2's first hint
+        /// makes a rocket, level 3's a bomb. On failure the message names a seed that works.
+        /// </summary>
+        [TestCase(2, Special.RocketH)]
+        [TestCase(3, Special.Bomb)]
+        public void First_session_levels_open_on_their_lesson(int number, Special lesson)
+        {
+            var def = Load(number);
+            bool Teaches(ulong seed)
+            {
+                var state = new LevelState(def, seed);
+                var hint = new Bot(BotKind.Greedy, new SeededRandom(1)).Choose(state); // LevelController's hint bot
+                if (!hint.HasValue)
+                {
+                    return false;
+                }
+
+                MoveResolver.Swap(state.Board, hint.Value.a, hint.Value.b);
+                return MatchFinder.Find(state.Board, hint.Value.a, hint.Value.b)
+                    .Any(g => g.creates == lesson || (lesson == Special.RocketH && g.creates == Special.RocketV));
+            }
+
+            var works = Enumerable.Range(1, 500).Select(s => (ulong)s).FirstOrDefault(Teaches);
+            Assert.IsTrue(Teaches(def.seed), $"level {number}'s seed {def.seed} doesn't open on a {lesson}; seed {works} does");
+        }
+
         [TestCaseSource(nameof(Numbers))]
         public void Level_is_valid_and_wins_inside_its_band(int number)
         {
-            var def = JsonConvert.DeserializeObject<LevelDef>(File.ReadAllText(Path.Combine(Folder(), $"level_{number:00}.json")));
+            var def = Load(number);
             CollectionAssert.IsEmpty(def.Validate());
             Assert.AreEqual(number, def.id);
 

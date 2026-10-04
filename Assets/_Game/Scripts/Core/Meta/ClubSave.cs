@@ -236,6 +236,12 @@ namespace CadenceClub.Core
 
         public bool RecruitUnlocked(MasterData md) => level > md.Int("recruit_after_level");
 
+        /// <summary>
+        /// The scripted first session: until level home_after_level is won, the app opens straight into the next level
+        /// and the win card only offers the next one.
+        /// </summary>
+        public bool InFirstSession(MasterData md) => level <= md.Int("home_after_level");
+
         /// <summary>One slot with the free rider, two once Recruit opens.</summary>
         public int SquadSlots(MasterData md) => RecruitUnlocked(md) ? 2 : freeRiderGiven ? 1 : 0;
 

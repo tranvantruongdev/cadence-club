@@ -1,6 +1,8 @@
 using System;
 using CadenceClub.Core;
 using Template.Core.Save;
+using Template.Game.Boot;
+using Template.Game.Flow;
 using Template.Infra;
 using UnityEngine;
 
@@ -44,6 +46,11 @@ namespace CadenceClub
 
         /// <summary>Riders granted outside Recruit (the free rider after a level) that Home still has to reveal.</summary>
         public static readonly System.Collections.Generic.List<PullOutcome> PendingReveals = new System.Collections.Generic.List<PullOutcome>();
+
+        /// <summary>First-session script: a new player boots straight into the next level, skipping Home.</summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        private static void OpenNewPlayersInALevel() =>
+            GameBootstrap.FirstState = () => Data.InFirstSession(Master) ? AppState.Game : AppState.Title;
 
         public static void Save()
         {

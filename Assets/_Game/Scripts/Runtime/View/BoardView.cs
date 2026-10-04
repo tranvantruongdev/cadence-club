@@ -36,6 +36,7 @@ namespace CadenceClub.View
         private Sequence _hint;
         private Cell _hintA;
         private Cell _hintB;
+        private Transform _finger;
 
         private sealed class PieceView
         {
@@ -231,8 +232,11 @@ namespace CadenceClub.View
             }
         }
 
-        /// <summary>Nudges the two pieces of a move toward each other, again and again, until <see cref="StopHint"/>.</summary>
-        public void ShowHint(Cell a, Cell b)
+        /// <summary>
+        /// Nudges the two pieces of a move toward each other, again and again, until <see cref="StopHint"/>. With
+        /// <paramref name="finger"/>, a fingertip also slides along the swap (the first session's "do this").
+        /// </summary>
+        public void ShowHint(Cell a, Cell b, bool finger = false)
         {
             StopHint();
             if (!_pieces.TryGetValue(a, out var va) || !_pieces.TryGetValue(b, out var vb))
@@ -243,15 +247,49 @@ namespace CadenceClub.View
             _hintA = a;
             _hintB = b;
             var nudge = (CellToWorld(b) - CellToWorld(a)) * 0.14f;
-            _hint = Sequence.Create(cycles: -1)
+            var hint = Sequence.Create(cycles: -1)
                 .Group(Tween.Position(va.root, CellToWorld(a) + nudge, 0.16f, Ease.InOutSine, 2, CycleMode.Yoyo))
-                .Group(Tween.Position(vb.root, CellToWorld(b) - nudge, 0.16f, Ease.InOutSine, 2, CycleMode.Yoyo))
-                .ChainDelay(0.9f);
+                .Group(Tween.Position(vb.root, CellToWorld(b) - nudge, 0.16f, Ease.InOutSine, 2, CycleMode.Yoyo));
+            if (finger)
+            {
+                var tip = Finger();
+                tip.gameObject.SetActive(true);
+                hint = hint.Group(Tween.Position(tip, CellToWorld(a), CellToWorld(b), 0.6f, Ease.InOutSine));
+            }
+
+            _hint = hint.ChainDelay(0.9f);
+        }
+
+        private Transform Finger()
+        {
+            if (_finger != null)
+            {
+                return _finger;
+            }
+
+            _finger = new GameObject("Finger").transform;
+            _finger.SetParent(transform, false);
+            foreach (var (scale, color, order) in new[] { (0.56f, new Color(0.07f, 0.11f, 0.18f, 0.85f), 30), (0.44f, Color.white, 31) })
+            {
+                var disc = new GameObject("Disc").AddComponent<SpriteRenderer>();
+                disc.transform.SetParent(_finger, false);
+                disc.transform.localScale = Vector3.one * scale;
+                disc.sprite = PieceArt.Disc;
+                disc.color = color;
+                disc.sortingOrder = order;
+            }
+
+            return _finger;
         }
 
         /// <summary>Stops the hint and puts both pieces back on their cells.</summary>
         public void StopHint()
         {
+            if (_finger != null)
+            {
+                _finger.gameObject.SetActive(false);
+            }
+
             if (!_hint.isAlive)
             {
                 return;

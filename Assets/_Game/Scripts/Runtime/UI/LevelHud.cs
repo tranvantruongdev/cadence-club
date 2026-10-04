@@ -161,13 +161,17 @@ namespace CadenceClub.UI
 
         /// <param name="rewards">The payout or life line under the result, e.g. "+90 coins · +1 star".</param>
         /// <param name="continueLabel">On a loss, the "+5 moves · 300" offer.</param>
-        public void ShowEnd(LevelState state, bool hasNext, string rewards, string continueLabel = null)
+        /// <param name="showHome">False in the first session, so the win card only leads on.</param>
+        /// <param name="nextLabel">The win card's way on ("Next level", or "Continue" when it leads Home).</param>
+        public void ShowEnd(LevelState state, bool hasNext, string rewards, string continueLabel = null, bool showHome = true,
+            string nextLabel = "Next level")
         {
             bool won = state.Outcome == LevelOutcome.Won;
             _next.SetActive(won && hasNext);
             _continue.SetActive(!won && continueLabel != null);
             _retry.SetActive(!(won && hasNext));
-            _home.SetActive(true);
+            _home.SetActive(showHome || !(won && hasNext)); // never a card with no way out
+            _next.GetComponentInChildren<TextMeshProUGUI>().text = nextLabel;
             if (continueLabel != null)
             {
                 _continue.GetComponentInChildren<TextMeshProUGUI>().text = continueLabel;

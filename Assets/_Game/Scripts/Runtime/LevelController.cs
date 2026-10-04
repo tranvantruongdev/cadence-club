@@ -25,6 +25,7 @@ namespace CadenceClub
     {
         private const float SwipeThreshold = 0.35f;
         private const float HintDelay = 5f;
+        private const float FirstSessionHintDelay = 1.5f;
 
         private LevelDef _def;
         private LevelState _state;
@@ -37,6 +38,8 @@ namespace CadenceClub
         private float _idle;
         private bool _busy;
         private bool _lifeOwed;
+        private bool _firstSession;
+        private bool _nextGoesHome;
         private List<BoosterDef> _boosters;
         private bool _pressing;
         private Vector3 _pressWorld;
@@ -71,6 +74,7 @@ namespace CadenceClub
         private void Play(int number)
         {
             _def = Levels.Load(number);
+            _firstSession = Club.Data.InFirstSession(Club.Master);
             if (_hud != null)
             {
                 Destroy(_hud.gameObject);
@@ -91,7 +95,16 @@ namespace CadenceClub
             Restart();
         }
 
-        private void NextLevel() => Play(Math.Min(_def.id + 1, Levels.Count));
+        private void NextLevel()
+        {
+            if (_nextGoesHome)
+            {
+                GoHome();
+                return;
+            }
+
+            Play(Math.Min(_def.id + 1, Levels.Count));
+        }
 
         /// <summary>Playing again needs a life; with none, the end card says when the next one comes.</summary>
         private void Retry()
@@ -179,7 +192,8 @@ namespace CadenceClub
         {
             var md = Club.Master;
             var squad = Club.Data.Squad(md).Where(o => md.Rider(o.id) != null).Select(o => new RiderSlot(md.Rider(o.id), o.level));
-            _state = new LevelState(_def, (ulong)DateTime.UtcNow.Ticks, squad, _boosters);
+            // The first session plays each level's designed board (level 2 opens on a rocket, level 3 on a bomb).
+            _state = new LevelState(_def, _firstSession ? _def.seed : (ulong)DateTime.UtcNow.Ticks, squad, _boosters);
             _boosters = null;
             if (_board == null)
             {
@@ -226,12 +240,12 @@ namespace CadenceClub
             }
 
             _idle += Time.deltaTime;
-            if (_idle >= HintDelay && !_board.IsHinting)
+            if (_idle >= (_firstSession ? FirstSessionHintDelay : HintDelay) && !_board.IsHinting)
             {
                 var hint = _hintBot.Choose(_state);
                 if (hint.HasValue)
                 {
-                    _board.ShowHint(hint.Value.a, hint.Value.b);
+                    _board.ShowHint(hint.Value.a, hint.Value.b, finger: _firstSession);
                 }
             }
 
@@ -318,8 +332,11 @@ namespace CadenceClub
 
                 string rewards = Settle();
                 var md = Club.Master;
+                // The first session's last win leads Home, where the first renovation task waits; before it, only on.
+                _nextGoesHome = _firstSession && !Club.Data.InFirstSession(md);
                 _hud.ShowEnd(_state, hasNext: _def.id < Levels.Count, rewards,
-                    $"+{md.Int("extra_moves")} moves  ·  {md.Int("extra_moves_cost")}");
+                    $"+{md.Int("extra_moves")} moves  ·  {md.Int("extra_moves_cost")}", showHome: !_firstSession,
+                    nextLabel: _nextGoesHome ? "Continue" : "Next level");
             }
 
             _idle = 0f;
