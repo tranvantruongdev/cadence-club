@@ -16,6 +16,7 @@ namespace CadenceClub.UI
 
         private TextMeshProUGUI _moves;
         private TextMeshProUGUI[] _goalCounts;
+        private Image[] _goalChecks;
         private RectTransform[] _goalIcons;
         private GameObject _end;
         private RectTransform _endCard;
@@ -44,10 +45,11 @@ namespace CadenceClub.UI
             bar.sizeDelta = new Vector2(1000f, 230f);
             UiFactory.Place(bar, new Vector2(0.5f, 1f), new Vector2(0f, -200f));
             UiFactory.AddShadow(bar, Vector2.zero, bar.sizeDelta, 40, 0.3f, 10f);
-            UiFactory.CreateRounded(bar, Vector2.zero, bar.sizeDelta, new Color(0.96f, 0.94f, 0.89f), 40);
+            UiFactory.CreateRounded(bar, Vector2.zero, bar.sizeDelta, theme.paper, 40);
 
             UiFactory.CreateText(bar, "GOALS", 34, new Vector2(-200f, 78f), new Vector2(500f, 50f)).color = theme.muted;
             _goalCounts = new TextMeshProUGUI[def.goals.Length];
+            _goalChecks = new Image[def.goals.Length];
             _goalIcons = new RectTransform[def.goals.Length];
             float spacing = 190f;
             float start = -200f - (def.goals.Length - 1) * spacing * 0.5f;
@@ -58,6 +60,8 @@ namespace CadenceClub.UI
                 _goalIcons[i] = icon.rectTransform;
                 _goalCounts[i] = UiFactory.CreateText(bar, "", 54, new Vector2(x, -80f), new Vector2(170f, 70f), TextAlignmentOptions.Center, UiFont.Display);
                 _goalCounts[i].color = theme.ink;
+                _goalChecks[i] = UiFactory.CreateImage(bar, theme.iconCheck, new Vector2(x, -80f), new Vector2(60f, 60f), Done);
+                _goalChecks[i].enabled = false;
             }
 
             UiFactory.CreateRounded(bar, new Vector2(260f, 0f), new Vector2(4f, 170f), new Color(0f, 0f, 0f, 0.12f), 2);
@@ -113,6 +117,9 @@ namespace CadenceClub.UI
 
                 _goalCounts[i].text = text;
                 _goalCounts[i].color = remaining == 0 ? Done : UiTheme.Current.ink;
+                bool check = remaining == 0 && _goalChecks[i].sprite != null; // neutral theme has no icons: keep the green 0
+                _goalChecks[i].enabled = check;
+                _goalCounts[i].enabled = !check;
             }
         }
 

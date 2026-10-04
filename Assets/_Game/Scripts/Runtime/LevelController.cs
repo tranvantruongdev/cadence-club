@@ -17,11 +17,15 @@ namespace CadenceClub
     /// <summary>Hand-made levels until the level files and editor arrive.</summary>
     public static class Levels
     {
+        /// <summary>
+        /// LevelSimulator, 200 runs each: greedy bot wins 100% (12 moves left), random bot 95% (7.5 left).
+        /// Four colours cascaded so much that even 45+45 was a 91% random-bot win.
+        /// </summary>
         public static LevelDef First() => new LevelDef
         {
             id = 1,
             shape = new[] { ".......", ".......", ".......", ".......", ".......", ".......", ".......", "......." },
-            colors = 4,
+            colors = 5,
             moves = 20,
             goals = new[] { LevelDef.Collect(0, 15), LevelDef.Collect(2, 15) },
             seed = 1,

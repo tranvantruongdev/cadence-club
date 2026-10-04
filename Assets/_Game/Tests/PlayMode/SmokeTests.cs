@@ -40,6 +40,7 @@ namespace CadenceClub.PlayModeTests
                 SceneManager.LoadScene("Boot");
                 yield return WaitForScene("Title", 20f);
                 yield return new WaitForSeconds(0.6f);
+                Capture("0-title");
 
                 Services.Get<GameFlow>().GoToAsync(AppState.Game).Forget();
                 yield return WaitForScene("Game", 20f);

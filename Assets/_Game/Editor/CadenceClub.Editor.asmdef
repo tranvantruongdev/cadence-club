@@ -1,0 +1,21 @@
+{
+    "name": "CadenceClub.Editor",
+    "rootNamespace": "CadenceClub.EditorTools",
+    "references": [
+        "Template.Runtime",
+        "Template.Editor",
+        "Unity.TextMeshPro",
+        "Unity.TextMeshPro.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
