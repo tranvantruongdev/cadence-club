@@ -6,6 +6,7 @@ using CadenceClub.UI;
 using CadenceClub.View;
 using Cysharp.Threading.Tasks;
 using Template.Core.Random;
+using Template.Feel;
 using Template.Game.Flow;
 using Template.Infra;
 using Template.Infra.Audio;
@@ -26,6 +27,7 @@ namespace CadenceClub
         private const float SwipeThreshold = 0.35f;
         private const float HintDelay = 5f;
         private const float FirstSessionHintDelay = 1.5f;
+        private const int VictoryLapRockets = 8;
 
         private LevelDef _def;
         private LevelState _state;
@@ -34,6 +36,7 @@ namespace CadenceClub
         private Camera _camera;
         private AudioService _audio;
         private AudioClip _pop;
+        private AudioClip _buzz;
         private Bot _hintBot;
         private float _idle;
         private bool _busy;
@@ -55,6 +58,7 @@ namespace CadenceClub
 
             _audio = Services.Get<AudioService>();
             _pop = ToneFactory.Blip("match-pop", 660f, 0.07f, 0.45f);
+            _buzz = ToneFactory.Blip("swap-buzz", 170f, 0.1f, 0.35f);
             _camera = Camera.main;
             _camera.orthographic = true;
             _camera.backgroundColor = new Color(0.07f, 0.11f, 0.18f);
@@ -298,9 +302,20 @@ namespace CadenceClub
             }
 
             _busy = true;
+            if (!MoveFinder.IsValid(_state.Board, a, b))
+            {
+                // No match: the pieces spring back with a soft buzz, and no move is used.
+                _audio.PlaySfx(_buzz, 0.5f, 1f);
+                Haptics.Light();
+                await _board.Bounce(a, b);
+                _busy = false;
+                return;
+            }
+
             var events = new List<BoardEvent>();
             _state.TryMove(a, b, events);
             await _board.Play(events, _state.Board, OnStep);
+            await VictoryLap();
             Finish();
         }
 
@@ -316,7 +331,22 @@ namespace CadenceClub
             _busy = true;
             Haptics.Medium();
             await _board.Play(events, _state.Board, OnStep);
+            await VictoryLap();
             Finish();
+        }
+
+        /// <summary>A win's moves left go off as rockets before the end card (skipped with Reduce Motion).</summary>
+        private async UniTask VictoryLap()
+        {
+            if (_state.Outcome != LevelOutcome.Won || _state.MovesLeft <= 0 || JuiceFx.ReduceMotion)
+            {
+                return;
+            }
+
+            _hud.Refresh(_state); // goals ticked before the show
+            var events = new List<BoardEvent>();
+            _state.VictoryLap(events, VictoryLapRockets);
+            await _board.Play(events, _state.Board, OnStep);
         }
 
         /// <summary>After a move or power: refresh the HUD and, if the level is over, pay out and show the end card.</summary>

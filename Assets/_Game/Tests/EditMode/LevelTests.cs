@@ -43,6 +43,29 @@ namespace CadenceClub.Core.Tests
         }
 
         [Test]
+        public void A_win_fires_its_moves_left_as_rockets_and_keeps_the_result()
+        {
+            var state = new LevelState(LevelDef.Rectangle(7, 7, 4, 40, LevelDef.Collect(2, 12)), 3);
+            var events = new List<BoardEvent>();
+            state.VictoryLap(events, 8);
+            Assert.IsEmpty(events, "no lap while playing");
+
+            PlayToEnd(state);
+            Assert.AreEqual(LevelOutcome.Won, state.Outcome);
+            var before = (state.MovesLeft, state.Progress(0));
+            int rockets = System.Math.Min(state.MovesLeft, 8);
+            state.VictoryLap(events, 8);
+
+            var made = events.Skip(1).Take(rockets).ToList();
+            Assert.IsTrue(made.All(e => e.type == BoardEventType.SpecialCreated && (e.piece.special == Special.RocketH || e.piece.special == Special.RocketV)),
+                $"the first {rockets} events turn pieces into rockets");
+            Assert.Greater(events.Count(e => e.type == BoardEventType.Cleared), rockets, "the rockets go off and clear their lines");
+            Assert.AreEqual(before, (state.MovesLeft, state.Progress(0)), "show only: moves and goals stay");
+            var board = state.Board;
+            Assert.IsTrue(Enumerable.Range(0, board.Height).All(y => Enumerable.Range(0, board.Width).All(x => !board[x, y].IsEmpty)), "the board refills");
+        }
+
+        [Test]
         public void Running_out_of_moves_loses_and_no_move_is_accepted_after()
         {
             var def = LevelDef.Rectangle(6, 6, 4, 3, LevelDef.Collect(0, 999));

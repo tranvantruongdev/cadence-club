@@ -192,6 +192,17 @@ namespace CadenceClub.PlayModeTests
                 Assert.IsTrue(board.IsHinting, "a hint should show after 5 s without a move");
                 Capture("level1-hint");
 
+                // A swap that makes no match springs back and uses no move.
+                var level1 = State(controller);
+                var noMatch = Enumerable.Range(0, level1.Board.Width - 1)
+                    .SelectMany(x => Enumerable.Range(0, level1.Board.Height).Select(y => (a: new Cell(x, y), b: new Cell(x + 1, y))))
+                    .First(p => MoveFinder.CanSwap(level1.Board, p.a, p.b) && !MoveFinder.IsValid(level1.Board, p.a, p.b));
+                controller.PlayMove(noMatch.a, noMatch.b);
+                yield return null;
+                yield return WaitIdle(controller);
+                Assert.AreEqual(0, level1.MovesUsed, "a swap with no match uses no move");
+                Assert.AreEqual(0, drifts, "the bounce puts both pieces back");
+
                 yield return PlayToEnd(controller, "level1");
                 Assert.AreEqual(0, drifts, "level 1: the board view should match the Core board after every move");
                 if (State(controller).Outcome == LevelOutcome.Won)
@@ -324,10 +335,17 @@ namespace CadenceClub.PlayModeTests
                 controller.PlayMove(move.Value.a, move.Value.b);
                 yield return null;
                 float t = 0f;
+                bool lapShot = false;
                 while ((bool)busy.GetValue(controller))
                 {
                     t += Time.unscaledDeltaTime;
                     Assert.Less(t, 10f, "a move should finish animating within 10 s");
+                    if (!lapShot && state.Outcome == LevelOutcome.Won && t > 1.2f)
+                    {
+                        lapShot = true;
+                        Capture($"{name}-victory-lap"); // the winning move has played: its moves left are going off
+                    }
+
                     yield return null;
                 }
 

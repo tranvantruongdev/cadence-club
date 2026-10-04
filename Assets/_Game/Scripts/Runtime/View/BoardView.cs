@@ -305,6 +305,21 @@ namespace CadenceClub.View
             }
         }
 
+        /// <summary>A swap that makes no match: the two pieces start to trade places, then spring back.</summary>
+        public async UniTask Bounce(Cell a, Cell b)
+        {
+            StopHint();
+            if (!_pieces.TryGetValue(a, out var va) || !_pieces.TryGetValue(b, out var vb))
+            {
+                return;
+            }
+
+            var half = (CellToWorld(b) - CellToWorld(a)) * 0.35f;
+            await Sequence.Create()
+                .Group(Tween.Position(va.root, CellToWorld(a) + half, SwapSeconds * 0.6f, Ease.OutQuad, 2, CycleMode.Yoyo))
+                .Group(Tween.Position(vb.root, CellToWorld(b) - half, SwapSeconds * 0.6f, Ease.OutQuad, 2, CycleMode.Yoyo));
+        }
+
         private async UniTask AnimateSwap(Cell a, Cell b)
         {
             if (!_pieces.TryGetValue(a, out var va) || !_pieces.TryGetValue(b, out var vb))

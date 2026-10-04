@@ -195,6 +195,28 @@ namespace CadenceClub.Core
             }
         }
 
+        /// <summary>
+        /// After a win, the moves left go off as a victory lap: up to <paramref name="max"/> plain pieces become rockets,
+        /// then all of them fire and the board cascades. Show only: goals, moves and charge stay as they are.
+        /// </summary>
+        public void VictoryLap(List<BoardEvent> events, int max)
+        {
+            if (Outcome != LevelOutcome.Won || MovesLeft <= 0)
+            {
+                return;
+            }
+
+            var cells = PowerTargets.PlainPieces(this, _rng, Math.Min(MovesLeft, max));
+            events.Add(new BoardEvent { type = BoardEventType.StepStarted, value = 0 });
+            for (int i = 0; i < cells.Count; i++)
+            {
+                Board[cells[i]] = Piece.Make(Board[cells[i]].color, i % 2 == 0 ? Special.RocketH : Special.RocketV);
+                events.Add(new BoardEvent { type = BoardEventType.SpecialCreated, a = cells[i], piece = Board[cells[i]] });
+            }
+
+            _resolver.ResolveCells(Board, cells, events);
+        }
+
         /// <summary>"+N moves" after running out: the lost level carries on. False unless it was lost.</summary>
         public bool Continue(int moves)
         {
