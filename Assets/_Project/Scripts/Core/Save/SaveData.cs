@@ -1,4 +1,5 @@
 using System;
+using Newtonsoft.Json.Linq;
 
 namespace Template.Core.Save
 {
@@ -14,8 +15,13 @@ namespace Template.Core.Save
         public int bestScore;
         public int totalRuns;
 
-        /// <summary>Cadence Club: the next level to play (1-based); past the last level once every level is won.</summary>
-        public int level = 1;
+        /// <summary>Game-specific state: each game keeps one object of its own here, through <see cref="GetGame{T}"/>.</summary>
+        public JObject game;
+
+        /// <summary>The game's own state object (a fresh one before the first <see cref="SetGame{T}"/>).</summary>
+        public T GetGame<T>() where T : new() => game == null ? new T() : game.ToObject<T>() ?? new T();
+
+        public void SetGame<T>(T value) => game = JObject.FromObject(value);
     }
 
     [Serializable]

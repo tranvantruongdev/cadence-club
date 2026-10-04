@@ -1,0 +1,13 @@
+key,value
+start_gems,500
+lives_max,5
+life_seconds,60
+win_coins,50
+coins_per_move_left,10
+area_gems,300
+pull_cost,100
+ten_pull_cost,1000
+banner,coast_sprint
+free_rider,linh
+free_rider_after_level,3
+recruit_after_level,5

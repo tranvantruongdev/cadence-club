@@ -1,0 +1,13 @@
+id,name,role,rarity,color,power,charge,power_by_level
+an,An,Sprinter,R,0,RowRockets,22,1;1;2;2;2
+binh,Bình,Climber,R,1,ColumnRockets,22,1;1;2;2;2
+chau,Châu,Mechanic,R,2,BreakObstacles,22,3;3;4;4;5
+dung,Dũng,Rouleur,R,3,MakeSpecials,22,3;3;4;4;5
+quan,Quân,Coach,R,4,ExtraMoves,24,1;1;2;2;2
+linh,Linh,Sprinter,SR,0,RowRockets,18,2;2;2;3;3
+khoa,Khoa,Climber,SR,1,ColumnRockets,18,2;2;2;3;3
+ngoc,Ngọc,Mechanic,SR,2,BreakObstacles,18,5;5;6;6;7
+son,Sơn,Rouleur,SR,3,MakeSpecials,18,5;5;6;6;7
+tuan,Tuấn,Sprinter,SSR,0,RowRockets,14,3;3;4;4;5
+ba_tu,Bà Tư,Mechanic,SSR,2,BreakObstacles,15,6;6;7;8;9
+hana,Hana,Coach,SSR,4,ExtraMoves,16,3;3;4;4;5

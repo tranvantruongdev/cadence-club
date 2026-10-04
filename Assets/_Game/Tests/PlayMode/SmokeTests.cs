@@ -39,6 +39,12 @@ namespace CadenceClub.PlayModeTests
             }
 
             Application.logMessageReceived += OnLog;
+            string shots = CameraShot.Folder("screenshots");
+            if (Directory.Exists(shots))
+            {
+                Directory.Delete(shots, true); // a lost level writes "-lost": an old "-won" shot would mislead
+            }
+
             try
             {
                 SceneManager.LoadScene("Boot");
@@ -61,7 +67,7 @@ namespace CadenceClub.PlayModeTests
                 Assert.AreEqual(0, drifts, "level 1: the board view should match the Core board after every move");
                 if (State(controller).Outcome == LevelOutcome.Won)
                 {
-                    Assert.GreaterOrEqual(Services.Get<SaveService>().Data.level, 2, "winning level 1 unlocks level 2");
+                    Assert.GreaterOrEqual(Club.Data.level, 2, "winning level 1 unlocks level 2");
 
                     // "Next level" rebuilds the board for level 2's shape.
                     typeof(LevelController).GetMethod("NextLevel", Private).Invoke(controller, null);
@@ -135,6 +141,10 @@ namespace CadenceClub.PlayModeTests
 
             Assert.AreNotEqual(LevelOutcome.Playing, state.Outcome, $"{name}: the level should end within {MaxMoves} moves");
             Assert.AreEqual(state.MovesUsed, moves, $"{name}: every bot move should count as one move");
+            var hud = typeof(LevelController).GetField("_hud", Private).GetValue(controller);
+            var bodyLabel = hud.GetType().GetField("_endBody", Private).GetValue(hud);
+            string body = (string)bodyLabel.GetType().GetProperty("text").GetValue(bodyLabel);
+            StringAssert.Contains(state.Outcome == LevelOutcome.Won ? "coins" : "left", body, $"{name}: the end card shows the payout or lives");
             yield return new WaitForSecondsRealtime(0.5f);
             Capture($"{name}-{(state.Outcome == LevelOutcome.Won ? "won" : "lost")}");
         }

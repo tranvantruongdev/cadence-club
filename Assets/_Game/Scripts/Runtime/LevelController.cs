@@ -5,7 +5,6 @@ using CadenceClub.UI;
 using CadenceClub.View;
 using Cysharp.Threading.Tasks;
 using Template.Core.Random;
-using Template.Core.Save;
 using Template.Game.Flow;
 using Template.Infra;
 using Template.Infra.Audio;
@@ -32,7 +31,6 @@ namespace CadenceClub
         private LevelHud _hud;
         private Camera _camera;
         private AudioService _audio;
-        private SaveService _save;
         private AudioClip _pop;
         private Bot _hintBot;
         private float _idle;
@@ -56,10 +54,10 @@ namespace CadenceClub
             _camera.backgroundColor = new Color(0.07f, 0.11f, 0.18f);
             _camera.clearFlags = CameraClearFlags.SolidColor;
 
-            _save = Services.Get<SaveService>();
+
             _hintBot = new Bot(BotKind.Greedy, new SeededRandom(1)); // hints the move a careful player would make
             AppLifecycle.BackPressed += GoHome;
-            Play(Levels.Override ?? Levels.Next(_save.Data.level));
+            Play(Levels.Override ?? Levels.Next(Club.Data.level));
         }
 
         private void OnDestroy() => AppLifecycle.BackPressed -= GoHome;
@@ -80,13 +78,53 @@ namespace CadenceClub
             }
 
             _hud = LevelHud.Create(_def);
-            _hud.RetryPressed += Restart;
+            _hud.RetryPressed += Retry;
             _hud.NextPressed += NextLevel;
             _hud.HomePressed += GoHome;
             Restart();
         }
 
         private void NextLevel() => Play(Math.Min(_def.id + 1, Levels.Count));
+
+        /// <summary>Playing again needs a life; with none, the end card says when the next one comes.</summary>
+        private void Retry()
+        {
+            var club = Club.Data;
+            if (club.Lives(Club.Master, Club.Now) <= 0)
+            {
+                _hud.ShowNoLives(club.NextLifeIn(Club.Master, Club.Now));
+                return;
+            }
+
+            Restart();
+        }
+
+        /// <summary>Pays out a win (coins, the first-win ★, the scripted free rider) or charges a life for a loss, and saves.</summary>
+        private string Settle()
+        {
+            var club = Club.Data;
+            var md = Club.Master;
+            string line;
+            if (_state.Outcome == LevelOutcome.Won)
+            {
+                var reward = club.Win(md, _def.id, _state.MovesLeft);
+                line = $"+{reward.coins} coins" + (reward.stars > 0 ? "  ·  +1 star" : "");
+                var gift = club.TryGiveFreeRider(md);
+                if (gift.HasValue)
+                {
+                    line += $"\n{md.Rider(gift.Value.riderId).name} joined the club!";
+                }
+            }
+            else
+            {
+                club.SpendLife(md, Club.Now);
+                int lives = club.Lives(md, Club.Now);
+                line = lives == 1 ? "1 life left" : $"{lives} lives left";
+            }
+
+            Club.Save();
+            return line;
+        }
 
         private void Restart()
         {
@@ -203,14 +241,9 @@ namespace CadenceClub
                 if (_state.Outcome == LevelOutcome.Won)
                 {
                     Haptics.Medium();
-                    if (_def.id >= _save.Data.level)
-                    {
-                        _save.Data.level = _def.id + 1;
-                        _save.Save();
-                    }
                 }
 
-                _hud.ShowEnd(_state, hasNext: _def.id < Levels.Count);
+                _hud.ShowEnd(_state, hasNext: _def.id < Levels.Count, Settle());
             }
 
             _idle = 0f;

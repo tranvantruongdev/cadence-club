@@ -1,0 +1,31 @@
+task,area,name,stars
+sweep_floor,1,Sweep the floor,1
+fix_lights,1,Fix the lights,1
+tool_wall,1,Tool wall,1
+workbench,1,Workbench,1
+repaint_sign,1,Repaint the sign,1
+bike_stand,1,Bike stand,1
+counter,2,Counter,1
+coffee_machine,2,Coffee machine,1
+stools,2,Stools,1
+plants,2,Plants,1
+menu_board,2,Menu board,1
+string_lights,2,String lights,1
+racks,3,Bike racks,1
+tyre_wall,3,Tyre wall,1
+lockers,3,Lockers,1
+washing_bay,3,Washing bay,1
+pump_station,3,Pump station,1
+club_banner,3,Club banner,1
+cones,4,Cones,1
+timing_gate,4,Timing gate,1
+water_station,4,Water station,1
+rest_bench,4,Rest bench,1
+flags,4,Flags,1
+lamp_posts,4,Lamp posts,1
+seats,5,Seats,1
+scoreboard,5,Scoreboard,1
+stand_flags,5,Bunting,1
+food_stall,5,Food stall,1
+podium,5,Podium,1
+trophy_case,5,Trophy case,1

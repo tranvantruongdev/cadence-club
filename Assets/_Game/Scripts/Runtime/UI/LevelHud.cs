@@ -90,8 +90,11 @@ namespace CadenceClub.UI
             _endTitle.enableAutoSizing = true; // "Level 30 complete!" is wider than "Out of moves"
             _endTitle.fontSizeMin = 56f;
             _endTitle.fontSizeMax = 88f;
-            _endBody =UiFactory.CreateText(_endCard, "", 48, new Vector2(0f, 90f), new Vector2(760f, 150f));
+            _endBody = UiFactory.CreateText(_endCard, "", 46, new Vector2(0f, 85f), new Vector2(760f, 210f));
             _endBody.color = theme.muted;
+            _endBody.enableAutoSizing = true; // up to three lines: moves, rewards, a new rider
+            _endBody.fontSizeMin = 30f;
+            _endBody.fontSizeMax = 46f;
             // Same spot: a won level offers the next one, otherwise another try.
             _next = UiFactory.CreateButton(_endCard, "Next level", new Vector2(0f, -120f), new Vector2(680f, 150f), () => NextPressed?.Invoke(),
                 ButtonStyle.Primary, theme.iconPlay).gameObject;
@@ -133,17 +136,24 @@ namespace CadenceClub.UI
             }
         }
 
-        public void ShowEnd(LevelState state, bool hasNext)
+        /// <param name="rewards">The payout or life line under the result, e.g. "+90 coins · +1 star".</param>
+        public void ShowEnd(LevelState state, bool hasNext, string rewards)
         {
             bool won = state.Outcome == LevelOutcome.Won;
             _next.SetActive(won && hasNext);
             _retry.SetActive(!(won && hasNext));
             _endTitle.text = won ? $"Level {state.Def.id} complete!" : "Out of moves";
-            _endBody.text = won
+            _endBody.text = (won
                 ? $"{state.MovesLeft} {(state.MovesLeft == 1 ? "move" : "moves")} to spare"
-                : "So close! Try that board again.";
+                : "So close! Try that board again.") + "\n" + rewards;
             _end.SetActive(true);
             JuiceFx.Punch(_endCard, 0.08f, 0.3f);
+        }
+
+        public void ShowNoLives(System.TimeSpan nextLife)
+        {
+            _endBody.text = $"No lives left.\nThe next one comes in {nextLife.Minutes}:{nextLife.Seconds:00}.";
+            JuiceFx.Punch(_endCard, 0.06f, 0.2f);
         }
 
         public void HideEnd() => _end.SetActive(false);

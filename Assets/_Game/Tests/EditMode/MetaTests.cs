@@ -1,0 +1,243 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using NUnit.Framework;
+using Template.Core.Random;
+
+namespace CadenceClub.Core.Tests
+{
+    /// <summary>Gacha, collection, lives, rewards and renovation rules, on small master data written here.</summary>
+    public class MetaTests
+    {
+        private static readonly long T0 = new DateTime(2026, 10, 4, 12, 0, 0, DateTimeKind.Utc).Ticks;
+
+        private static MasterData Md(int pity = 60, string weights = "R,80\nstandard,SR,17\nstandard,SSR,3")
+        {
+            var tables = new Dictionary<string, string>
+            {
+                ["config"] = "key,value\nstart_gems,500\nlives_max,5\nlife_seconds,60\nwin_coins,50\ncoins_per_move_left,10\narea_gems,300\n" +
+                             "pull_cost,100\nten_pull_cost,1000\nbanner,b\nfree_rider,r1\nfree_rider_after_level,3\nrecruit_after_level,5",
+                ["riders"] = "id,name,role,rarity,color,power,charge,power_by_level\n" +
+                             "r1,Rider One,Sprinter,R,0,RowRockets,22,1;1;2;2;2\nr2,Rider Two,Climber,R,1,ColumnRockets,22,1;1;2;2;2\n" +
+                             "s1,Super One,Mechanic,SR,2,BreakObstacles,18,5;5;6;6;7\ns2,Super Two,Rouleur,SR,3,MakeSpecials,18,5;5;6;6;7\n" +
+                             "x1,Star One,Sprinter,SSR,0,RowRockets,14,3;3;4;4;5\nx2,Star Two,Coach,SSR,4,ExtraMoves,16,3;3;4;4;5",
+                ["rate_tables"] = "table,rarity,weight\nstandard," + weights,
+                ["banners"] = $"id,name,featured,rate_table,pity,featured_share\nb,Banner,x1,standard,{pity},50",
+                ["rarities"] = "rarity,duplicate_shards\nR,5\nSR,15\nSSR,40",
+                ["rider_levels"] = "level,shards\n2,10\n3,25\n4,50\n5,100",
+                ["areas"] = "area,name,story\n1,Shed,\"Grandpa: \"\"It lives.\"\"\"\n2,Yard,Done",
+                ["renovation"] = "task,area,name,stars\n" + string.Join("\n", Enumerable.Range(1, 6).Select(i => $"a{i},1,Task A{i},1")) + "\n" +
+                                 string.Join("\n", Enumerable.Range(1, 6).Select(i => $"b{i},2,Task B{i},1")),
+            };
+            return MasterData.Parse(name => tables.TryGetValue(name, out var text) ? text : null);
+        }
+
+        private static List<PullResult> Pulls(MasterData md, int count, int batch = 1, ulong seed = 1)
+        {
+            var roller = new GachaRoller(new SeededRandom(seed));
+            var banner = md.Banners[0];
+            int pity = 0;
+            var all = new List<PullResult>();
+            for (int i = 0; i < count; i += batch)
+            {
+                all.AddRange(roller.Pull(md, banner, batch, ref pity));
+            }
+
+            return all;
+        }
+
+        [Test]
+        public void Csv_reads_quotes_commas_and_blank_lines()
+        {
+            var rows = Csv.Parse("a,b\r\n\"x, \"\"y\"\"\",2\n\n");
+            Assert.AreEqual(2, rows.Count);
+            CollectionAssert.AreEqual(new[] { "x, \"y\"", "2" }, rows[1]);
+        }
+
+        [Test]
+        public void Master_data_validates_and_explains_mistakes()
+        {
+            var md = Md();
+            CollectionAssert.IsEmpty(md.Validate());
+            Assert.AreEqual("Grandpa: \"It lives.\"", md.Areas[0].story);
+            Assert.AreEqual(4, md.Rider("x1").Power(3));
+
+            var broken = Md(pity: 150, weights: "R,80\nstandard,SR,16\nstandard,SSR,3").Validate();
+            Assert.That(broken, Has.Some.Contains("add up to 99"));
+            Assert.That(broken, Has.Some.Contains("pity 150"));
+        }
+
+        [Test]
+        public void Rates_match_the_table_over_many_pulls()
+        {
+            var pulls = Pulls(Md(pity: 1000000), 100000);
+            double Share(Rarity r) => pulls.Count(p => p.rarity == r) / (double)pulls.Count;
+            Assert.AreEqual(0.80, Share(Rarity.R), 0.01);
+            Assert.AreEqual(0.17, Share(Rarity.SR), 0.01);
+            Assert.AreEqual(0.03, Share(Rarity.SSR), 0.004);
+        }
+
+        [Test]
+        public void Pity_guarantees_an_SSR_by_the_60th_pull()
+        {
+            // With no SSR in the table, pity alone makes exactly every 60th pull an SSR.
+            var forced = Pulls(Md(weights: "R,83\nstandard,SR,17\nstandard,SSR,0"), 600);
+            var ssrAt = forced.Select((p, i) => (p, i)).Where(x => x.p.rarity == Rarity.SSR).Select(x => x.i + 1).ToList();
+            CollectionAssert.AreEqual(new[] { 60, 120, 180, 240, 300, 360, 420, 480, 540, 600 }, ssrAt);
+
+            // With real rates, no run of pulls without an SSR is longer than 59.
+            int gap = 0;
+            int longest = 0;
+            foreach (var p in Pulls(Md(), 30000))
+            {
+                gap = p.rarity == Rarity.SSR ? 0 : gap + 1;
+                longest = Math.Max(longest, gap);
+            }
+
+            Assert.LessOrEqual(longest, 59);
+        }
+
+        [Test]
+        public void Every_ten_pull_has_an_SR_or_better()
+        {
+            var pulls = Pulls(Md(weights: "R,100\nstandard,SR,0\nstandard,SSR,0"), 50, batch: 10);
+            for (int batch = 0; batch < 5; batch++)
+            {
+                var ten = pulls.Skip(batch * 10).Take(10).ToList();
+                Assert.AreEqual(1, ten.Count(p => p.rarity == Rarity.SR), $"10-pull {batch + 1}: the last R is lifted to SR");
+                Assert.AreEqual(Rarity.SR, ten[9].rarity);
+            }
+        }
+
+        [Test]
+        public void The_featured_rider_is_half_of_the_SSRs_and_seeds_repeat()
+        {
+            var pulls = Pulls(Md(weights: "R,0\nstandard,SR,0\nstandard,SSR,100"), 4000);
+            Assert.AreEqual(0.5, pulls.Count(p => p.riderId == "x1") / 4000.0, 0.03);
+            Assert.IsTrue(pulls.Where(p => p.riderId == "x1").All(p => p.featured));
+
+            var again = Pulls(Md(), 200, 10, seed: 9);
+            CollectionAssert.AreEqual(again.Select(p => p.riderId), Pulls(Md(), 200, 10, seed: 9).Select(p => p.riderId));
+        }
+
+        [Test]
+        public void Duplicates_become_shards_and_shards_level_riders_up_to_5()
+        {
+            var md = Md();
+            var save = new ClubSave();
+            Assert.IsTrue(save.Grant(md, "r1").isNew);
+            Assert.AreEqual(5, save.Grant(md, "r1").shards, "an R duplicate is 5 shards");
+            save.Grant(md, "r1");
+            Assert.IsTrue(save.TryLevelUp(md, "r1"), "10 shards reach level 2");
+            Assert.AreEqual((2, 0), (save.Owned("r1").level, save.Owned("r1").shards));
+            Assert.IsFalse(save.TryLevelUp(md, "r1"), "level 3 needs 25");
+
+            save.Owned("r1").shards = 1000;
+            while (save.TryLevelUp(md, "r1"))
+            {
+            }
+
+            Assert.AreEqual(5, save.Owned("r1").level);
+            Assert.AreEqual(1000 - 25 - 50 - 100, save.Owned("r1").shards);
+        }
+
+        [Test]
+        public void Lives_refill_one_a_minute_up_to_five()
+        {
+            var md = Md();
+            var save = new ClubSave();
+            save.StartIfNew(md);
+            Assert.AreEqual(5, save.Lives(md, T0));
+            save.SpendLife(md, T0);
+            save.SpendLife(md, T0);
+            Assert.AreEqual(3, save.Lives(md, T0 + TimeSpan.FromSeconds(59).Ticks));
+            Assert.AreEqual(4, save.Lives(md, T0 + TimeSpan.FromSeconds(60).Ticks));
+            Assert.AreEqual(TimeSpan.FromSeconds(60), save.NextLifeIn(md, T0 + TimeSpan.FromSeconds(60).Ticks));
+            Assert.AreEqual(5, save.Lives(md, T0 + TimeSpan.FromSeconds(150).Ticks));
+            Assert.AreEqual(TimeSpan.Zero, save.NextLifeIn(md, T0 + TimeSpan.FromSeconds(150).Ticks));
+
+            long later = T0 + TimeSpan.FromHours(1).Ticks;
+            for (int i = 0; i < 5; i++)
+            {
+                Assert.IsTrue(save.SpendLife(md, later));
+            }
+
+            Assert.IsFalse(save.SpendLife(md, later), "no life left to spend");
+        }
+
+        [Test]
+        public void A_win_pays_coins_and_the_first_win_of_a_level_a_star()
+        {
+            var md = Md();
+            var save = new ClubSave();
+            var first = save.Win(md, 1, 4);
+            Assert.AreEqual((1, 90), (first.stars, first.coins), "50 + 10 per move left");
+            Assert.AreEqual(2, save.level);
+            var replay = save.Win(md, 1, 0);
+            Assert.AreEqual((0, 50), (replay.stars, replay.coins), "replays earn coins, not stars");
+            Assert.AreEqual((1, 140, 2), (save.stars, save.coins, save.level));
+        }
+
+        [Test]
+        public void Renovation_spends_stars_and_finishing_an_area_pays_gems_once()
+        {
+            var md = Md();
+            var save = new ClubSave { stars = 6 };
+            for (int i = 1; i <= 5; i++)
+            {
+                var step = save.TryBuild(md, $"a{i}");
+                Assert.IsTrue(step.built);
+                Assert.IsNull(step.completedArea);
+            }
+
+            Assert.IsFalse(save.TryBuild(md, "a1").built, "already built");
+            var last = save.TryBuild(md, "a6");
+            Assert.AreEqual("Shed", last.completedArea.name);
+            Assert.AreEqual((300, 300), (last.gems, save.gems));
+            Assert.AreEqual("Yard", save.CurrentArea(md).name);
+            Assert.IsFalse(save.TryBuild(md, "b1").built, "no stars left");
+        }
+
+        [Test]
+        public void The_free_rider_squad_slots_and_recruit_open_with_progress()
+        {
+            var md = Md();
+            var save = new ClubSave();
+            save.StartIfNew(md);
+            Assert.IsNull(save.TryGiveFreeRider(md));
+            Assert.AreEqual(0, save.SquadSlots(md));
+
+            save.level = 4;
+            var gift = save.TryGiveFreeRider(md).Value;
+            Assert.AreEqual(("r1", true), (gift.riderId, gift.isNew));
+            CollectionAssert.AreEqual(new[] { "r1" }, save.squad);
+            Assert.AreEqual(1, save.SquadSlots(md));
+            Assert.IsNull(save.TryGiveFreeRider(md), "only once");
+
+            var roller = new GachaRoller(new SeededRandom(3));
+            Assert.IsNull(save.TryPull(md, md.Banners[0], 1, roller), "Recruit opens after level 5");
+            save.level = 6;
+            Assert.AreEqual(2, save.SquadSlots(md));
+            Assert.IsNull(save.TryPull(md, md.Banners[0], 10, roller), "500 gems don't cover a 10-pull");
+            save.gems = 1000;
+            var ten = save.TryPull(md, md.Banners[0], 10, roller);
+            Assert.AreEqual(10, ten.Count);
+            Assert.AreEqual(0, save.gems);
+            Assert.AreEqual(10, ten.Count(o => o.grant.isNew) + ten.Count(o => o.grant.shards > 0), "each pull is a new rider or shards");
+        }
+
+        [Test]
+        public void A_rider_moved_to_the_other_squad_slot_swaps_places()
+        {
+            var md = Md();
+            var save = new ClubSave { level = 6 };
+            save.Grant(md, "r1");
+            save.Grant(md, "s1");
+            Assert.IsTrue(save.SetSquad(md, 0, "r1"));
+            Assert.IsTrue(save.SetSquad(md, 1, "s1"));
+            Assert.IsTrue(save.SetSquad(md, 0, "s1"));
+            CollectionAssert.AreEqual(new[] { "s1", "r1" }, save.squad);
+            Assert.IsFalse(save.SetSquad(md, 1, "x2"), "not owned");
+        }
+    }
+}

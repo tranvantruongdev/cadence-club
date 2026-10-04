@@ -35,7 +35,7 @@ namespace CadenceClub
             camera.backgroundColor = new Color(0.07f, 0.11f, 0.18f);
 
             var theme = UiTheme.Current;
-            int saved = Services.Get<SaveService>().Data.level;
+            int saved = Club.Data.level;
             bool allDone = saved > Levels.Count;
             UiFactory.EnsureEventSystem();
             var canvas = UiFactory.CreateCanvas("Title UI");
