@@ -393,6 +393,23 @@ namespace CadenceClub.Core
             }
         }
 
+        /// <summary>Clears the given cells as one step (specials there go off), then cascades like a move. For rider powers.</summary>
+        public void ResolveCells(Board board, IEnumerable<Cell> cells, List<BoardEvent> events) =>
+            Resolve(board, new List<Cell>(cells), new List<MatchGroup>(), new HashSet<Cell>(), events);
+
+        /// <summary>Turns the given plain pieces into random rockets and bombs of their colour, as one step. For rider powers.</summary>
+        public void MakeSpecials(Board board, IEnumerable<Cell> cells, List<BoardEvent> events)
+        {
+            events.Add(new BoardEvent { type = BoardEventType.StepStarted, value = 0 });
+            var kinds = new[] { Special.RocketH, Special.RocketV, Special.Bomb };
+            foreach (var cell in cells)
+            {
+                var special = Piece.Make(board[cell].color, kinds[_rng.Range(0, kinds.Length)]);
+                board[cell] = special;
+                events.Add(new BoardEvent { type = BoardEventType.SpecialCreated, a = cell, piece = special });
+            }
+        }
+
         /// <summary>Clears the given cells and creations, then cascades until stable.</summary>
         private void Resolve(Board board, List<Cell> clears, List<MatchGroup> creations, HashSet<Cell> noBlast, List<BoardEvent> events)
         {

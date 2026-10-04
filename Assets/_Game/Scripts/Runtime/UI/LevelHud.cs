@@ -1,7 +1,10 @@
 using System;
+using System.Collections.Generic;
 using CadenceClub.Art;
 using CadenceClub.Core;
+using PrimeTween;
 using Template.Feel;
+using Template.Infra.Device;
 using Template.UI;
 using TMPro;
 using UnityEngine;
@@ -25,10 +28,24 @@ namespace CadenceClub.UI
         private GameObject _next;
         private GameObject _retry;
         private int _shownMoves = -1;
+        private RectTransform _safe;
+        private readonly List<Portrait> _portraits = new List<Portrait>();
+        private bool _squadBuilt;
 
         public event Action RetryPressed;
         public event Action NextPressed;
         public event Action HomePressed;
+
+        /// <summary>A squad portrait was tapped (slot index).</summary>
+        public event Action<int> PowerPressed;
+
+        private sealed class Portrait
+        {
+            public RectTransform root;
+            public Image ring;
+            public Image glow;
+            public bool wasFull;
+        }
 
         public static LevelHud Create(LevelDef def)
         {
@@ -42,7 +59,7 @@ namespace CadenceClub.UI
         private void Build(LevelDef def)
         {
             var theme = UiTheme.Current;
-            var safe = UiFactory.CreateSafeArea(transform);
+            var safe = _safe = UiFactory.CreateSafeArea(transform);
 
             var bar = UiFactory.CreateRect("Goals bar", safe);
             bar.sizeDelta = new Vector2(1000f, 230f);
@@ -107,6 +124,7 @@ namespace CadenceClub.UI
 
         public void Refresh(LevelState state)
         {
+            RefreshSquad(state.Squad);
             if (state.MovesLeft != _shownMoves)
             {
                 bool changed = _shownMoves >= 0;
@@ -157,5 +175,86 @@ namespace CadenceClub.UI
         }
 
         public void HideEnd() => _end.SetActive(false);
+
+        /// <summary>
+        /// Rider portraits along the bottom (the thumb zone): a charge ring in the rider's colour fills as their pieces
+        /// clear; full, the portrait glows and breathes, and a tap fires the power.
+        /// </summary>
+        private void RefreshSquad(IReadOnlyList<RiderSlot> squad)
+        {
+            if (!_squadBuilt)
+            {
+                _squadBuilt = true;
+                for (int i = 0; i < squad.Count; i++)
+                {
+                    _portraits.Add(BuildPortrait(squad[i].Def, i, squad.Count));
+                }
+            }
+
+            for (int i = 0; i < _portraits.Count && i < squad.Count; i++)
+            {
+                var p = _portraits[i];
+                bool full = squad[i].Full;
+                p.ring.fillAmount = squad[i].Fill;
+                if (full && !p.wasFull)
+                {
+                    Haptics.Light();
+                    p.glow.color = WithAlpha(p.glow.color, 0.45f);
+                    JuiceFx.Punch(p.root, 0.15f, 0.3f);
+                    if (!JuiceFx.ReduceMotion)
+                    {
+                        Tween.Scale(p.root, 1.07f, 0.5f, Ease.InOutSine, cycles: -1, cycleMode: CycleMode.Yoyo, startDelay: 0.3f);
+                    }
+                }
+                else if (!full && p.wasFull)
+                {
+                    Tween.StopAll(p.root);
+                    p.root.localScale = Vector3.one;
+                    p.glow.color = WithAlpha(p.glow.color, 0f);
+                }
+
+                p.wasFull = full;
+            }
+        }
+
+        private Portrait BuildPortrait(RiderDef rider, int slot, int count)
+        {
+            var theme = UiTheme.Current;
+            var colour = PieceArt.Colors[Mathf.Clamp(rider.color, 0, PieceArt.Colors.Length - 1)];
+            var root = UiFactory.CreateRect($"Rider {rider.name}", _safe);
+            root.sizeDelta = new Vector2(200f, 250f);
+            UiFactory.Place(root, new Vector2(0.5f, 0f), new Vector2((slot - (count - 1) * 0.5f) * 250f, 210f));
+            var glow = UiFactory.CreateImage(root, PieceArt.Disc, new Vector2(0f, 20f), new Vector2(220f, 220f), WithAlpha(colour, 0f));
+            UiFactory.CreateImage(root, PieceArt.Disc, new Vector2(0f, 20f), new Vector2(180f, 180f), new Color(0.04f, 0.07f, 0.12f, 0.92f));
+            var ring = UiFactory.CreateImage(root, PieceArt.Ring, new Vector2(0f, 20f), new Vector2(180f, 180f), colour);
+            ring.type = Image.Type.Filled;
+            ring.fillMethod = Image.FillMethod.Radial360;
+            ring.fillOrigin = (int)Image.Origin360.Top;
+            ring.fillClockwise = true;
+            ring.fillAmount = 0f;
+            UiFactory.CreateImage(root, PieceArt.Disc, new Vector2(0f, 20f), new Vector2(128f, 128f), Color.Lerp(colour, Color.black, 0.2f));
+            UiFactory.CreateText(root, rider.name.Substring(0, 1), 76, new Vector2(0f, 26f), new Vector2(128f, 110f), TextAlignmentOptions.Center, UiFont.Display)
+                .color = Color.white;
+            UiFactory.CreateText(root, rider.name, 32, new Vector2(0f, -96f), new Vector2(240f, 46f)).color = theme.textOnDark;
+            UiFactory.CreateText(root, rider.rarity.ToString(), 26, new Vector2(70f, 96f), new Vector2(80f, 40f), TextAlignmentOptions.Center, UiFont.Display)
+                .color = rider.rarity == Rarity.SSR ? theme.accent : theme.textOnDark;
+            var button = root.gameObject.AddComponent<Button>();
+            button.targetGraphic = ring;
+            button.onClick.AddListener(() => PowerPressed?.Invoke(slot));
+            return new Portrait { root = root, ring = ring, glow = glow };
+        }
+
+        private static Color WithAlpha(Color c, float a) => new Color(c.r, c.g, c.b, a);
+
+        private void OnDestroy()
+        {
+            foreach (var p in _portraits)
+            {
+                if (p.root != null)
+                {
+                    Tween.StopAll(p.root);
+                }
+            }
+        }
     }
 }

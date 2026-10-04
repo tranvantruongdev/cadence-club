@@ -32,6 +32,8 @@ namespace CadenceClub.Art
         private static Sprite _cell;
         private static Sprite _ice;
         private static Sprite _chain;
+        private static Sprite _disc;
+        private static Sprite _ring;
 
         public static Sprite Piece(int color)
         {
@@ -82,6 +84,12 @@ namespace CadenceClub.Art
 
         /// <summary>Two crossed steel chains, drawn over a locked piece.</summary>
         public static Sprite Chain => _chain != null ? _chain : (_chain = Draw("Chain", (x, y) => Mathf.Min(ChainLine(x, y), ChainLine(x, -y)), Hex(0x9AA3AE)));
+
+        /// <summary>A white filled circle (portrait backgrounds).</summary>
+        public static Sprite Disc => _disc != null ? _disc : (_disc = DrawMask("Disc", (x, y) => Mathf.Sqrt(x * x + y * y) - 0.96f, Color.white));
+
+        /// <summary>A white ring, for charge meters drawn as a radial fill.</summary>
+        public static Sprite Ring => _ring != null ? _ring : (_ring = DrawMask("Ring", (x, y) => Mathf.Abs(Mathf.Sqrt(x * x + y * y) - 0.88f) - 0.09f, Color.white));
 
         public static Sprite GoalIcon(Goal goal) =>
             goal.kind == GoalKind.Crates ? Crate(2) : goal.kind == GoalKind.Ice ? Ice : Piece(goal.color);

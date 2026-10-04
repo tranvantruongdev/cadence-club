@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CadenceClub.Core;
 using CadenceClub.UI;
 using CadenceClub.View;
@@ -81,6 +82,7 @@ namespace CadenceClub
             _hud.RetryPressed += Retry;
             _hud.NextPressed += NextLevel;
             _hud.HomePressed += GoHome;
+            _hud.PowerPressed += slot => UsePower(slot).Forget();
             Restart();
         }
 
@@ -128,7 +130,9 @@ namespace CadenceClub
 
         private void Restart()
         {
-            _state = new LevelState(_def, (ulong)DateTime.UtcNow.Ticks);
+            var md = Club.Master;
+            var squad = Club.Data.Squad(md).Where(o => md.Rider(o.id) != null).Select(o => new RiderSlot(md.Rider(o.id), o.level));
+            _state = new LevelState(_def, (ulong)DateTime.UtcNow.Ticks, squad);
             if (_board == null)
             {
                 _board = BoardView.Create(_state.Board);
@@ -235,6 +239,27 @@ namespace CadenceClub
             var events = new List<BoardEvent>();
             _state.TryMove(a, b, events);
             await _board.Play(events, _state.Board, OnStep);
+            Finish();
+        }
+
+        /// <summary>Fires a full rider's power (a portrait tap): no move used, and the view replays it like a move.</summary>
+        public async UniTaskVoid UsePower(int slot)
+        {
+            var events = new List<BoardEvent>();
+            if (_busy || !_state.TryUsePower(slot, events))
+            {
+                return;
+            }
+
+            _busy = true;
+            Haptics.Medium();
+            await _board.Play(events, _state.Board, OnStep);
+            Finish();
+        }
+
+        /// <summary>After a move or power: refresh the HUD and, if the level is over, pay out and show the end card.</summary>
+        private void Finish()
+        {
             _hud.Refresh(_state);
             if (_state.Outcome != LevelOutcome.Playing)
             {

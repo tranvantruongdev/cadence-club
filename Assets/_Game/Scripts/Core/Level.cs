@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Template.Core.Random;
 
 namespace CadenceClub.Core
@@ -169,8 +170,10 @@ namespace CadenceClub.Core
         private readonly SeededRandom _rng;
         private readonly MoveResolver _resolver;
         private readonly int[] _progress;
+        private readonly List<RiderSlot> _squad;
 
-        public LevelState(LevelDef def, ulong? seed = null)
+        /// <param name="squad">Riders brought into the level, charged as given (empty in the game; tests may pre-charge).</param>
+        public LevelState(LevelDef def, ulong? seed = null, IEnumerable<RiderSlot> squad = null)
         {
             Def = def ?? throw new ArgumentNullException(nameof(def));
             _rng = new SeededRandom(seed ?? def.seed);
@@ -178,6 +181,7 @@ namespace CadenceClub.Core
             Board = BoardGenerator.Generate(def.Width, def.Height, def.Playable(), def.colors, _rng, def.shape);
             MovesLeft = def.moves;
             _progress = new int[def.goals.Length];
+            _squad = squad?.Select(s => new RiderSlot(s.Def, s.Level, s.Charge)).ToList() ?? new List<RiderSlot>();
         }
 
         private LevelState(LevelState other)
@@ -190,7 +194,10 @@ namespace CadenceClub.Core
             MovesUsed = other.MovesUsed;
             Outcome = other.Outcome;
             _progress = (int[])other._progress.Clone();
+            _squad = other._squad.Select(s => new RiderSlot(s.Def, s.Level, s.Charge)).ToList();
         }
+
+        public IReadOnlyList<RiderSlot> Squad => _squad;
 
         public LevelDef Def { get; }
         public Board Board { get; }
@@ -250,23 +257,7 @@ namespace CadenceClub.Core
 
             MovesLeft--;
             MovesUsed++;
-            for (int i = start; i < events.Count; i++)
-            {
-                var e = events[i];
-                if (e.type == BoardEventType.Cleared)
-                {
-                    Count(GoalKind.Collect, e.piece.color);
-                }
-                else if (e.type == BoardEventType.CrateHit && e.value == 0)
-                {
-                    Count(GoalKind.Crates, Piece.NoColor);
-                }
-                else if (e.type == BoardEventType.IceBroken)
-                {
-                    Count(GoalKind.Ice, Piece.NoColor);
-                }
-            }
-
+            Absorb(events, start);
             if (AllGoalsMet())
             {
                 Outcome = LevelOutcome.Won;
@@ -277,6 +268,71 @@ namespace CadenceClub.Core
             }
 
             return true;
+        }
+
+        /// <summary>Fires a full rider's power (no move used) and empties their charge. False if not ready or the level is over.</summary>
+        public bool TryUsePower(int slot, List<BoardEvent> events)
+        {
+            if (Outcome != LevelOutcome.Playing || slot < 0 || slot >= _squad.Count || !_squad[slot].Full)
+            {
+                return false;
+            }
+
+            var rider = _squad[slot];
+            rider.Charge = 0;
+            int start = events.Count;
+            switch (rider.Def.power)
+            {
+                case PowerKind.RowRockets:
+                case PowerKind.ColumnRockets:
+                    _resolver.ResolveCells(Board, PowerTargets.Lines(this, rider.Amount, rider.Def.power == PowerKind.RowRockets), events);
+                    break;
+                case PowerKind.BreakObstacles:
+                    _resolver.ResolveCells(Board, PowerTargets.Obstacles(this, _rng, rider.Amount), events);
+                    break;
+                case PowerKind.MakeSpecials:
+                    _resolver.MakeSpecials(Board, PowerTargets.PlainPieces(this, _rng, rider.Amount), events);
+                    break;
+                case PowerKind.ExtraMoves:
+                    MovesLeft += rider.Amount;
+                    break;
+            }
+
+            Absorb(events, start);
+            if (AllGoalsMet())
+            {
+                Outcome = LevelOutcome.Won;
+            }
+
+            return true;
+        }
+
+        /// <summary>Counts goal progress and rider charge from the events of one move or power.</summary>
+        private void Absorb(List<BoardEvent> events, int start)
+        {
+            for (int i = start; i < events.Count; i++)
+            {
+                var e = events[i];
+                if (e.type == BoardEventType.Cleared)
+                {
+                    Count(GoalKind.Collect, e.piece.color);
+                    foreach (var rider in _squad)
+                    {
+                        if (rider.Def.color == e.piece.color && !rider.Full)
+                        {
+                            rider.Charge++;
+                        }
+                    }
+                }
+                else if (e.type == BoardEventType.CrateHit && e.value == 0)
+                {
+                    Count(GoalKind.Crates, Piece.NoColor);
+                }
+                else if (e.type == BoardEventType.IceBroken)
+                {
+                    Count(GoalKind.Ice, Piece.NoColor);
+                }
+            }
         }
 
         private void Count(GoalKind kind, int color)

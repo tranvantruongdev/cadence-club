@@ -82,11 +82,35 @@ namespace CadenceClub.PlayModeTests
                 yield return new WaitForSeconds(0.4f);
                 Capture("0b-title-after-win");
 
-                // Level 20, a bump: a ring of crates around ice, chains in the corners.
+                // Level 20, a bump: a ring of crates around ice, chains in the corners. Squad: Linh (row rockets)
+                // and Bà Tư (breaks obstacles).
+                var club = Club.Data;
+                var md = Club.Master;
+                club.Grant(md, "linh");
+                club.Grant(md, "ba_tu");
+                club.level = Mathf.Max(club.level, md.Int("recruit_after_level") + 1); // two squad slots
+                Assert.IsTrue(club.SetSquad(md, 0, "linh") && club.SetSquad(md, 1, "ba_tu"));
                 Levels.Override = 20;
                 yield return EnterGame();
                 controller = Object.FindAnyObjectByType<LevelController>();
+                Assert.AreEqual(2, State(controller).Squad.Count, "the squad comes into the level");
                 Capture("obstacles-start");
+
+                // Fill Bà Tư's charge, show the glowing portrait, then fire her power.
+                var batu = State(controller).Squad[1];
+                typeof(RiderSlot).GetProperty("Charge").SetValue(batu, batu.Def.charge);
+                var levelHud = (CadenceClub.UI.LevelHud)typeof(LevelController).GetField("_hud", Private).GetValue(controller);
+                levelHud.Refresh(State(controller));
+                yield return new WaitForSeconds(0.4f);
+                Capture("obstacles-rider-full");
+                int movesBefore = State(controller).MovesLeft;
+                controller.UsePower(1);
+                yield return null;
+                yield return WaitIdle(controller);
+                Assert.AreEqual(movesBefore, State(controller).MovesLeft, "a power uses no move");
+                Assert.AreEqual(0, drifts, "the board view should match the Core board after a power");
+                Capture("obstacles-after-power");
+
                 yield return PlayToEnd(controller, "obstacles");
                 Assert.AreEqual(0, drifts, "obstacles: the board view should match the Core board after every move");
 
@@ -102,6 +126,18 @@ namespace CadenceClub.PlayModeTests
 
         private static LevelState State(LevelController controller) =>
             (LevelState)typeof(LevelController).GetField("_state", Private).GetValue(controller);
+
+        private static IEnumerator WaitIdle(LevelController controller)
+        {
+            var busy = typeof(LevelController).GetField("_busy", Private);
+            float t = 0f;
+            while ((bool)busy.GetValue(controller))
+            {
+                t += Time.unscaledDeltaTime;
+                Assert.Less(t, 10f, "a move or power should finish animating within 10 s");
+                yield return null;
+            }
+        }
 
         private static IEnumerator EnterGame()
         {
