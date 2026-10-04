@@ -1,0 +1,6 @@
+# Example master data. Edit here, then Unity menu: Template > Import Master Data.
+id,name,rarity,price
+bell,Brass Bell,R,100
+bottle,Water Bottle,R,80
+helmet,Aero Helmet,SR,450
+wheel,Carbon Wheel,SSR,1200

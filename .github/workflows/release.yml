@@ -1,0 +1,118 @@
+name: Release
+
+# Push a tag like v1.2.0 → builds Android APK + AAB and a Windows zip, creates a GitHub Release,
+# and (if configured) pushes the APK and Windows builds to itch.io.
+#
+# Secrets: UNITY_LICENSE, UNITY_EMAIL, UNITY_PASSWORD,
+#          ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASS, ANDROID_KEYALIAS_NAME, ANDROID_KEYALIAS_PASS,
+#          BUTLER_API_KEY (itch.io → Settings → API keys)
+# Variables: ITCH_USER, ITCH_GAME (leave unset to skip itch.io)
+# Check input names against https://game.ci/docs/github/builder when upgrading GameCI.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  # Skips the whole release (instead of failing) until the Unity licence secret exists.
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      licence: ${{ steps.licence.outputs.present }}
+    steps:
+      - id: licence
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        run: echo "present=$([ -n "$UNITY_LICENSE" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: check
+    if: needs.check.outputs.licence == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: android-apk
+            targetPlatform: Android
+            androidExportType: androidPackage
+          - name: android-aab
+            targetPlatform: Android
+            androidExportType: androidAppBundle
+          - name: windows
+            targetPlatform: StandaloneWindows64
+            androidExportType: androidPackage
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # GameCI's Semantic versioning reads the tag history
+
+      - uses: jlumbroso/free-disk-space@v1.3.1
+        if: matrix.targetPlatform == 'Android'
+
+      - uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-${{ matrix.targetPlatform }}-${{ hashFiles('Packages/packages-lock.json') }}
+          restore-keys: Library-${{ matrix.targetPlatform }}-
+
+      - uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          targetPlatform: ${{ matrix.targetPlatform }}
+          androidExportType: ${{ matrix.androidExportType }}
+          androidKeystoreName: release.keystore
+          androidKeystoreBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          androidKeystorePass: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          androidKeyaliasName: ${{ secrets.ANDROID_KEYALIAS_NAME }}
+          androidKeyaliasPass: ${{ secrets.ANDROID_KEYALIAS_PASS }}
+          versioning: Semantic
+          buildName: game
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: build/${{ matrix.targetPlatform }}
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Package release files
+        run: |
+          set -euo pipefail
+          name="${{ github.event.repository.name }}-${{ github.ref_name }}"
+          mkdir -p release
+          cp dist/android-apk/*.apk "release/${name}.apk"
+          cp dist/android-aab/*.aab "release/${name}.aab"
+          (cd dist/windows && zip -qr "../../release/${name}-windows.zip" . -x '*_DoNotShip/*')
+          ls -la release
+
+      - name: Push to itch.io
+        if: vars.ITCH_USER != '' && vars.ITCH_GAME != ''
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+          ITCH_TARGET: ${{ vars.ITCH_USER }}/${{ vars.ITCH_GAME }}
+        run: |
+          set -euo pipefail
+          curl -sSL -o butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
+          unzip -q butler.zip && chmod +x butler
+          ./butler push release/*.apk "$ITCH_TARGET:android" --userversion "${{ github.ref_name }}"
+          ./butler push release/*-windows.zip "$ITCH_TARGET:windows" --userversion "${{ github.ref_name }}"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/*.apk
+            release/*-windows.zip
+          generate_release_notes: true

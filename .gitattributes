@@ -1,0 +1,33 @@
+# Normalise text to LF in the repo; Unity reads either.
+* text=auto eol=lf
+
+*.cs      text diff=csharp
+*.asmdef  text
+*.json    text
+*.md      text
+*.csv     text
+
+# Unity YAML. Register UnityYAMLMerge locally for smart scene/prefab merges:
+#   git config merge.unityyamlmerge.driver '"<Unity>/Editor/Data/Tools/UnityYAMLMerge.exe" merge -p %O %B %A %A'
+*.unity   text merge=unityyamlmerge
+*.prefab  text merge=unityyamlmerge
+*.asset   text merge=unityyamlmerge
+*.meta    text
+
+# Binary assets
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.psd  binary
+*.tga  binary
+*.wav  binary
+*.mp3  binary
+*.ogg  binary
+*.ttf  binary
+*.otf  binary
+*.fbx  binary
+*.dll  binary
+*.so   binary
+*.a    binary
+*.aar  binary
+*.jar  binary

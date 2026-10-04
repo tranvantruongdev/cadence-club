@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Compiles Assets/_Project/Scripts/Core outside Unity, with Unity's language level and API surface
+    (C# 9, .NET Standard 2.1). If something builds here, it builds in Unity 6 too.
+  -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>Template.Core</AssemblyName>
+    <RootNamespace>Template.Core</RootNamespace>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../Assets/_Project/Scripts/Core/**/*.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+</Project>

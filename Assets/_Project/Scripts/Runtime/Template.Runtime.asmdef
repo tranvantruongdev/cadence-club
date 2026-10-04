@@ -1,0 +1,23 @@
+{
+    "name": "Template.Runtime",
+    "rootNamespace": "Template",
+    "references": [
+        "Template.Core",
+        "UniTask",
+        "PrimeTween.Runtime",
+        "Unity.InputSystem",
+        "UnityEngine.UI",
+        "Unity.TextMeshPro"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "Newtonsoft.Json.dll"
+    ],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
