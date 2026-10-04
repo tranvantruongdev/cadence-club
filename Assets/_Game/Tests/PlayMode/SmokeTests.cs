@@ -2,6 +2,7 @@ using System.Collections;
 using System.IO;
 using System.Reflection;
 using CadenceClub.Core;
+using CadenceClub.View;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using Template.Core.Random;
@@ -53,6 +54,12 @@ namespace CadenceClub.PlayModeTests
                 Assert.IsNotNull(stateField);
                 Assert.IsNotNull(busyField);
                 Capture("1-board");
+
+                // Nobody moves for 5 s: the board hints a move.
+                var board = (BoardView)typeof(LevelController).GetField("_board", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(controller);
+                yield return new WaitForSeconds(5.5f);
+                Assert.IsTrue(board.IsHinting, "a hint should show after 5 s without a move");
+                Capture("1b-hint");
 
                 var bot = new Bot(BotKind.Greedy, new SeededRandom(7));
                 int moves = 0;

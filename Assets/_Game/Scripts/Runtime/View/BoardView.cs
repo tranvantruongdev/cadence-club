@@ -28,6 +28,9 @@ namespace CadenceClub.View
         private Vector2 _origin;
         private Transform _pieceRoot;
         private Board _board;
+        private Sequence _hint;
+        private Cell _hintA;
+        private Cell _hintB;
 
         private sealed class PieceView
         {
@@ -37,6 +40,8 @@ namespace CadenceClub.View
         }
 
         public Bounds Bounds { get; private set; }
+
+        public bool IsHinting => _hint.isAlive;
 
         public static BoardView Create(Board board)
         {
@@ -87,6 +92,7 @@ namespace CadenceClub.View
         /// <summary>Snaps the view to the board's current state (start of a level, after a shuffle, as a safety net).</summary>
         public void Sync(Board board)
         {
+            StopHint();
             _board = board;
             foreach (var view in _pieces.Values)
             {
@@ -113,6 +119,7 @@ namespace CadenceClub.View
         /// </summary>
         public async UniTask Play(List<BoardEvent> events, Board finalBoard, Action<int, List<BoardEvent>, int, int> onStep = null)
         {
+            StopHint();
             int i = 0;
             while (i < events.Count)
             {
@@ -149,6 +156,42 @@ namespace CadenceClub.View
             {
                 Debug.LogWarning("[BoardView] View drifted from the board; resyncing.");
                 Sync(finalBoard);
+            }
+        }
+
+        /// <summary>Nudges the two pieces of a move toward each other, again and again, until <see cref="StopHint"/>.</summary>
+        public void ShowHint(Cell a, Cell b)
+        {
+            StopHint();
+            if (!_pieces.TryGetValue(a, out var va) || !_pieces.TryGetValue(b, out var vb))
+            {
+                return;
+            }
+
+            _hintA = a;
+            _hintB = b;
+            var nudge = (CellToWorld(b) - CellToWorld(a)) * 0.14f;
+            _hint = Sequence.Create(cycles: -1)
+                .Group(Tween.Position(va.root, CellToWorld(a) + nudge, 0.16f, Ease.InOutSine, 2, CycleMode.Yoyo))
+                .Group(Tween.Position(vb.root, CellToWorld(b) - nudge, 0.16f, Ease.InOutSine, 2, CycleMode.Yoyo))
+                .ChainDelay(0.9f);
+        }
+
+        /// <summary>Stops the hint and puts both pieces back on their cells.</summary>
+        public void StopHint()
+        {
+            if (!_hint.isAlive)
+            {
+                return;
+            }
+
+            _hint.Stop();
+            foreach (var cell in new[] { _hintA, _hintB })
+            {
+                if (_pieces.TryGetValue(cell, out var view))
+                {
+                    view.root.position = CellToWorld(cell);
+                }
             }
         }
 

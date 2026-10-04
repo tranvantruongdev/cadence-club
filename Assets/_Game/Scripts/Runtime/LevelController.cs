@@ -4,6 +4,7 @@ using CadenceClub.Core;
 using CadenceClub.UI;
 using CadenceClub.View;
 using Cysharp.Threading.Tasks;
+using Template.Core.Random;
 using Template.Game.Flow;
 using Template.Infra;
 using Template.Infra.Audio;
@@ -39,6 +40,7 @@ namespace CadenceClub
     public sealed class LevelController : MonoBehaviour
     {
         private const float SwipeThreshold = 0.35f;
+        private const float HintDelay = 5f;
 
         private LevelDef _def;
         private LevelState _state;
@@ -47,6 +49,8 @@ namespace CadenceClub
         private Camera _camera;
         private AudioService _audio;
         private AudioClip _pop;
+        private Bot _hintBot;
+        private float _idle;
         private bool _busy;
         private bool _pressing;
         private Vector3 _pressWorld;
@@ -68,6 +72,7 @@ namespace CadenceClub
             _camera.clearFlags = CameraClearFlags.SolidColor;
 
             _def = Levels.First();
+            _hintBot = new Bot(BotKind.Greedy, new SeededRandom(1)); // hints the move a careful player would make
             _hud = LevelHud.Create(_def);
             _hud.RetryPressed += Restart;
             _hud.HomePressed += GoHome;
@@ -92,6 +97,7 @@ namespace CadenceClub
 
             _hud.HideEnd();
             _hud.Refresh(_state);
+            _idle = 0f;
             _busy = false;
         }
 
@@ -106,14 +112,31 @@ namespace CadenceClub
 
         private void Update()
         {
-            if (_busy || _state == null || _state.Outcome != LevelOutcome.Playing || Pointer.current == null)
+            if (_busy || _state == null || _state.Outcome != LevelOutcome.Playing)
             {
                 return;
             }
 
+            _idle += Time.deltaTime;
+            if (_idle >= HintDelay && !_board.IsHinting)
+            {
+                var hint = _hintBot.Choose(_state);
+                if (hint.HasValue)
+                {
+                    _board.ShowHint(hint.Value.a, hint.Value.b);
+                }
+            }
+
             var pointer = Pointer.current;
+            if (pointer == null)
+            {
+                return;
+            }
+
             if (pointer.press.wasPressedThisFrame)
             {
+                _idle = 0f;
+                _board.StopHint();
                 bool overUi = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
                 _pressWorld = ScreenToWorld(pointer.position.ReadValue());
                 _pressOnBoard = !overUi && _board.TryWorldToCell(_pressWorld, out _pressCell);
@@ -167,6 +190,7 @@ namespace CadenceClub
                 _hud.ShowEnd(_state);
             }
 
+            _idle = 0f;
             _busy = false;
         }
 
