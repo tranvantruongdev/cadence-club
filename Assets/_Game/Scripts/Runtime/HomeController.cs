@@ -27,6 +27,9 @@ namespace CadenceClub
         private SettingsPresenter _settingsPresenter;
         private LevelStartScreen _levelStart;
         private StoryScreen _story;
+        private RevealScreen _reveal;
+        private RecruitScreen _recruit;
+        private RidersScreen _riders;
         private RectTransform _safe;
         private RectTransform _area;
         private RectTransform _play;
@@ -69,7 +72,49 @@ namespace CadenceClub
             _levelStart = LevelStartScreen.Create(canvas.transform, _stack, picker);
             _levelStart.PlayPressed += StartLevel;
             _story = StoryScreen.Create(canvas.transform, _stack);
+            _reveal = RevealScreen.Create(canvas.transform, _stack);
+            _recruit = RecruitScreen.Create(canvas.transform, _stack, _reveal);
+            _riders = RidersScreen.Create(canvas.transform, _stack);
+            BuildNav();
             RefreshWallet();
+            if (Club.PendingReveals.Count > 0)
+            {
+                RevealGifts().Forget();
+            }
+        }
+
+        /// <summary>The free rider gets the full reveal the first time Home opens after the gift.</summary>
+        private async UniTaskVoid RevealGifts()
+        {
+            var gifts = Club.PendingReveals.ToList();
+            Club.PendingReveals.Clear();
+            await UniTask.Delay(400);
+            await _reveal.PlayAsync(gifts);
+        }
+
+        private void BuildNav()
+        {
+            var theme = UiTheme.Current;
+            var md = Club.Master;
+            var riders = UiFactory.CreateButton(_safe, "Riders", Vector2.zero, new Vector2(420f, 130f), () => _riders.OpenAsync().Forget(),
+                ButtonStyle.Secondary, theme.iconTrophy);
+            UiFactory.Place(riders, new Vector2(0.5f, 0f), new Vector2(-225f, 430f));
+            bool open = Club.Data.RecruitUnlocked(md);
+            var recruit = UiFactory.CreateButton(_safe, open ? "Recruit" : $"Recruit · Lv {md.Int("recruit_after_level") + 1}", Vector2.zero,
+                new Vector2(420f, 130f), () => OpenRecruit(open), open ? ButtonStyle.Primary : ButtonStyle.Secondary, theme.iconStar);
+            UiFactory.Place(recruit, new Vector2(0.5f, 0f), new Vector2(225f, 430f));
+        }
+
+        private void OpenRecruit(bool open)
+        {
+            if (open)
+            {
+                _recruit.OpenAsync().Forget();
+            }
+            else
+            {
+                JuiceFx.Punch(_play, 0.1f, 0.3f); // locked: point at Play
+            }
         }
 
         private void Update()

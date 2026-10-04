@@ -261,8 +261,8 @@ namespace CadenceClub.UI
             UiFactory.CreateText(_card, $"{area.name} restored!", 76, new Vector2(0f, 290f), new Vector2(820f, 120f), TextAlignmentOptions.Center, UiFont.Display)
                 .color = theme.ink;
             UiFactory.CreateText(_card, area.story, 48, new Vector2(0f, 90f), new Vector2(780f, 240f), TextAlignmentOptions.Center, UiFont.Story).color = theme.ink;
-            UiFactory.CreateImage(_card, PieceArt.Gem, new Vector2(-100f, -110f), new Vector2(84f, 84f), Color.white);
-            UiFactory.CreateText(_card, $"+{gems} gems", 52, new Vector2(40f, -108f), new Vector2(300f, 80f), TextAlignmentOptions.MidlineLeft, UiFont.Display)
+            UiFactory.CreateImage(_card, PieceArt.Gem, new Vector2(-150f, -110f), new Vector2(84f, 84f), Color.white);
+            UiFactory.CreateText(_card, $"+{gems} gems", 52, new Vector2(60f, -108f), new Vector2(300f, 80f), TextAlignmentOptions.MidlineLeft, UiFont.Display)
                 .color = theme.ink;
             UiFactory.CreateButton(_card, "Continue", new Vector2(0f, -290f), new Vector2(640f, 150f), () => _stack.PopAsync().Forget(),
                 ButtonStyle.Primary, theme.iconCheck);

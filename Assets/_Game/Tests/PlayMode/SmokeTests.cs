@@ -69,6 +69,37 @@ namespace CadenceClub.PlayModeTests
                     Capture("0a-home-built");
                 }
 
+                // Recruit: a 10-pull, the reveal mid-way and skipped to its summary; then the collection and a rider's card.
+                homeClub.level = Mathf.Max(homeClub.level, homeMd.Int("recruit_after_level") + 1);
+                homeClub.gems = Mathf.Max(homeClub.gems, homeMd.Int("ten_pull_cost"));
+                var stack = (Template.UI.ScreenStack)typeof(HomeController).GetField("_stack", Private).GetValue(home);
+                var recruit = (CadenceClub.UI.RecruitScreen)typeof(HomeController).GetField("_recruit", Private).GetValue(home);
+                var reveal = (CadenceClub.UI.RevealScreen)typeof(HomeController).GetField("_reveal", Private).GetValue(home);
+                recruit.OpenAsync().Forget();
+                yield return new WaitForSeconds(0.6f);
+                Capture("0d-recruit");
+                int gems = homeClub.gems;
+                recruit.PullAsync(10).Forget();
+                yield return new WaitForSeconds(2.2f);
+                Capture("0e-reveal");
+                Assert.AreEqual(gems - homeMd.Int("ten_pull_cost"), homeClub.gems, "a 10-pull costs its gems");
+                reveal.Skip();
+                yield return new WaitForSeconds(0.6f);
+                Capture("0f-reveal-summary");
+                typeof(CadenceClub.UI.RevealScreen).GetMethod("Close", Private).Invoke(reveal, null);
+                yield return new WaitForSeconds(0.5f);
+                yield return stack.PopAsync().ToCoroutine(); // Recruit
+
+                var riders = (CadenceClub.UI.RidersScreen)typeof(HomeController).GetField("_riders", Private).GetValue(home);
+                riders.OpenAsync().Forget();
+                yield return new WaitForSeconds(0.6f);
+                Capture("0g-riders");
+                riders.OpenDetailAsync(homeClub.riders[0].id).Forget();
+                yield return new WaitForSeconds(0.6f);
+                Capture("0h-rider-detail");
+                yield return stack.PopAsync().ToCoroutine();
+                yield return stack.PopAsync().ToCoroutine();
+
                 var levelStart = (CadenceClub.UI.LevelStartScreen)typeof(HomeController).GetField("_levelStart", Private).GetValue(home);
                 levelStart.OpenAsync(Levels.Load(Levels.Next(homeClub.level))).Forget();
                 yield return new WaitForSeconds(0.6f);

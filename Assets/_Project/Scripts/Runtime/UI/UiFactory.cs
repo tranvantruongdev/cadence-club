@@ -347,20 +347,33 @@ namespace Template.UI
                 return;
             }
 
-            var text = CreateText(root, label, fontSize, Vector2.zero, size);
-            text.color = color;
-            text.textWrappingMode = TextWrappingModes.NoWrap;
             if (icon == null)
             {
+                var plain = CreateText(root, label, fontSize, Vector2.zero, size);
+                plain.color = color;
+                plain.textWrappingMode = TextWrappingModes.NoWrap;
                 return;
             }
 
-            const float gap = 20f;
-            float textWidth = text.GetPreferredValues(label).x;
-            float group = iconSize + gap + textWidth;
-            CreateImage(root, icon, new Vector2(-group * 0.5f + iconSize * 0.5f, 0f), new Vector2(iconSize, iconSize), color).name = "Icon";
-            text.rectTransform.anchoredPosition = new Vector2(-group * 0.5f + iconSize + gap + textWidth * 0.5f, 0f);
-            text.rectTransform.sizeDelta = new Vector2(textWidth + 8f, size.y);
+            // Icon and label centred as a group by a layout group, which sizes the label once the button is active.
+            // (Measuring the text here returns 0 when a popup builds its buttons while still hidden.)
+            var row = CreateRect("Content", root);
+            row.anchorMin = row.anchorMax = new Vector2(0.5f, 0.5f);
+            row.sizeDelta = size;
+            var layout = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+            layout.childAlignment = TextAnchor.MiddleCenter;
+            layout.spacing = 20f;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = false;
+            layout.childForceExpandHeight = false;
+            var image = CreateImage(row, icon, Vector2.zero, new Vector2(iconSize, iconSize), color);
+            image.name = "Icon";
+            var iconLayout = image.gameObject.AddComponent<LayoutElement>();
+            iconLayout.preferredWidth = iconLayout.preferredHeight = iconSize;
+            var text = CreateText(row, label, fontSize, Vector2.zero, size);
+            text.color = color;
+            text.textWrappingMode = TextWrappingModes.NoWrap;
         }
 
         /// <summary>Left-aligned row label in ink, with an optional icon before it.</summary>

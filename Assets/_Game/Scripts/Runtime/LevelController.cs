@@ -115,6 +115,11 @@ namespace CadenceClub
                 if (gift.HasValue)
                 {
                     line += $"\n{md.Rider(gift.Value.riderId).name} joined the club!";
+                    Club.PendingReveals.Add(new PullOutcome
+                    {
+                        pull = new PullResult { riderId = gift.Value.riderId, rarity = md.Rider(gift.Value.riderId).rarity },
+                        grant = gift.Value,
+                    });
                 }
             }
             else

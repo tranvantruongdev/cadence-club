@@ -40,6 +40,7 @@ namespace Template.UI
                 }
 
                 _stack.Add(screen);
+                screen.transform.SetAsLastSibling(); // the newest screen draws on top, whatever order screens were created in
                 await screen.ShowAsync();
             }
             finally

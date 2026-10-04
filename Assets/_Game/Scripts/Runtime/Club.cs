@@ -36,6 +36,9 @@ namespace CadenceClub
 
         public static long Now => DateTime.UtcNow.Ticks;
 
+        /// <summary>Riders granted outside Recruit (the free rider after a level) that Home still has to reveal.</summary>
+        public static readonly System.Collections.Generic.List<PullOutcome> PendingReveals = new System.Collections.Generic.List<PullOutcome>();
+
         public static void Save()
         {
             var service = Services.Get<SaveService>();
