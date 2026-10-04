@@ -121,7 +121,21 @@ namespace CadenceClub.Core.Tests
         }
 
         [Test]
-        public void Two_swapped_rockets_clear_their_row_and_column()
+        public void A_bomb_set_off_by_a_match_clears_the_three_by_three_around_it()
+        {
+            // Swapping (4,3) down into (4,2) makes AAA on row 2, through the bomb at (2,2).
+            var board = Board.Parse("BCBCB", "CBCBA", "BCAAB", "CBCBC", "BCBCB");
+            board[2, 2] = Piece.Make(0, Special.Bomb);
+            var events = new List<BoardEvent>();
+            Assert.IsTrue(new MoveResolver(3, new SeededRandom(5)).TryMove(board, new Cell(4, 3), new Cell(4, 2), events));
+
+            var firstStep = FirstStepClears(events);
+            AssertSquareCleared(firstStep, new Cell(2, 2), 1);
+            Assert.IsTrue(events.Any(e => e.type == BoardEventType.SpecialActivated && e.piece.special == Special.Bomb));
+        }
+
+        [Test]
+        public void Rocket_plus_rocket_clears_a_cross_where_the_piece_landed()
         {
             var board = Board.Parse("ABCA", "BCAB", "CABC", "ABCA");
             board[0, 0] = Piece.Make(0, Special.RocketH);
@@ -130,31 +144,56 @@ namespace CadenceClub.Core.Tests
             Assert.IsTrue(new MoveResolver(3, new SeededRandom(3)).TryMove(board, new Cell(0, 0), new Cell(1, 0), events));
 
             var firstStep = FirstStepClears(events);
-            // After the swap the vertical rocket is at (0,0) and the horizontal one at (1,0).
             for (int i = 0; i < 4; i++)
             {
-                Assert.Contains(new Cell(i, 0), firstStep, "row 0 cleared by the horizontal rocket");
-                Assert.Contains(new Cell(0, i), firstStep, "column 0 cleared by the vertical rocket");
+                Assert.Contains(new Cell(i, 0), firstStep, "row of the landing cell");
+                Assert.Contains(new Cell(1, i), firstStep, "column of the landing cell");
             }
         }
 
         [Test]
-        public void Bomb_clears_the_three_by_three_around_it()
+        public void Rocket_plus_bomb_clears_a_three_wide_cross()
         {
-            var board = Board.Parse("ABCAB", "BCABC", "CABCA", "ABCAB", "BCABC");
-            board[2, 2] = Piece.Make(1, Special.Bomb);
-            board[3, 2] = Piece.Make(2, Special.Glider);
+            var board = Board.Parse("ABCABC", "BCABCA", "CABCAB", "ABCABC", "BCABCA", "CABCAB");
+            board[2, 2] = Piece.Make(0, Special.RocketH);
+            board[3, 2] = Piece.Make(1, Special.Bomb);
             var events = new List<BoardEvent>();
-            Assert.IsTrue(new MoveResolver(3, new SeededRandom(5)).TryMove(board, new Cell(2, 2), new Cell(3, 2), events));
+            Assert.IsTrue(new MoveResolver(3, new SeededRandom(4)).TryMove(board, new Cell(2, 2), new Cell(3, 2), events));
 
             var firstStep = FirstStepClears(events);
-            for (int dy = -1; dy <= 1; dy++)
+            for (int i = 0; i < 6; i++)
             {
-                for (int dx = -1; dx <= 1; dx++)
+                for (int d = -1; d <= 1; d++)
                 {
-                    Assert.Contains(new Cell(3 + dx, 2 + dy), firstStep, "the bomb moved to (3,2) and cleared around it");
+                    Assert.Contains(new Cell(i, 2 + d), firstStep, "three rows through (3,2)");
+                    Assert.Contains(new Cell(3 + d, i), firstStep, "three columns through (3,2)");
                 }
             }
+        }
+
+        [Test]
+        public void Bomb_plus_bomb_clears_five_by_five()
+        {
+            var board = Board.Parse("ABCABCA", "BCABCAB", "CABCABC", "ABCABCA", "BCABCAB", "CABCABC", "ABCABCA");
+            board[3, 3] = Piece.Make(0, Special.Bomb);
+            board[4, 3] = Piece.Make(1, Special.Bomb);
+            var events = new List<BoardEvent>();
+            Assert.IsTrue(new MoveResolver(3, new SeededRandom(6)).TryMove(board, new Cell(3, 3), new Cell(4, 3), events));
+            AssertSquareCleared(FirstStepClears(events), new Cell(4, 3), 2);
+        }
+
+        [Test]
+        public void Disco_plus_rocket_turns_that_colour_into_rockets_that_all_go_off()
+        {
+            var board = Board.Parse("ABCA", "BCAB", "CABC", "@BCA");
+            board[1, 0] = Piece.Make(1, Special.RocketH);
+            var events = new List<BoardEvent>();
+            Assert.IsTrue(new MoveResolver(3, new SeededRandom(8)).TryMove(board, new Cell(0, 0), new Cell(1, 0), events));
+
+            var firstStep = FirstStepEvents(events);
+            int rocketsFired = firstStep.Count(e => e.type == BoardEventType.SpecialActivated &&
+                                                    (e.piece.special == Special.RocketH || e.piece.special == Special.RocketV));
+            Assert.AreEqual(5, rocketsFired, "every B (4 plain + the rocket) became a rocket and fired");
         }
 
         [Test]
@@ -229,6 +268,17 @@ namespace CadenceClub.Core.Tests
 
         private static List<Cell> FirstStepClears(List<BoardEvent> events) =>
             FirstStepEvents(events).Where(e => e.type == BoardEventType.Cleared).Select(e => e.a).ToList();
+
+        private static void AssertSquareCleared(List<Cell> cleared, Cell centre, int radius)
+        {
+            for (int dy = -radius; dy <= radius; dy++)
+            {
+                for (int dx = -radius; dx <= radius; dx++)
+                {
+                    Assert.Contains(new Cell(centre.x + dx, centre.y + dy), cleared, $"cell around {centre} cleared");
+                }
+            }
+        }
 
         /// <summary>A diamond-shaped board: holes in the corners.</summary>
         private static bool[] Diamond(int size)

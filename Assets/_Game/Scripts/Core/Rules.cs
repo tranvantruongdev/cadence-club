@@ -162,14 +162,18 @@ namespace CadenceClub.Core
                 }
                 else
                 {
+                    if (other.IsSpecial)
+                    {
+                        // Disco + special: every piece of that colour becomes the special, then they all go off.
+                        ConvertColor(board, other.color, other.special);
+                    }
+
                     AddAll(board, clears, p => p.color == other.color);
                 }
             }
             else if (pa.IsSpecial && pb.IsSpecial)
             {
-                // Two specials swapped: both go off. (Combos come next.)
-                clears.Add(a);
-                clears.Add(b);
+                ApplyCombo(board, a, b, pa, pb, clears, noBlast);
             }
             else
             {
@@ -186,6 +190,104 @@ namespace CadenceClub.Core
 
             Resolve(board, clears, creations, noBlast, events);
             return true;
+        }
+
+        /// <summary>
+        /// Two coloured specials swapped together make one bigger effect, centred where the moved piece landed (b):
+        /// rocket + rocket = cross · rocket + bomb = 3-wide cross · bomb + bomb = 5×5 ·
+        /// glider + special = the glider carries the special to a target · glider + glider = three gliders.
+        /// (Disco combos are handled with the other disco swaps.)
+        /// </summary>
+        private void ApplyCombo(Board board, Cell a, Cell b, Piece pa, Piece pb, List<Cell> clears, HashSet<Cell> noBlast)
+        {
+            clears.Add(a);
+            clears.Add(b);
+            noBlast.Add(a); // the combo replaces their separate effects
+            noBlast.Add(b);
+            var sa = pa.special;
+            var sb = pb.special;
+            if (IsRocket(sa) && IsRocket(sb))
+            {
+                AddCross(board, clears, b, 0);
+            }
+            else if ((IsRocket(sa) && sb == Special.Bomb) || (sa == Special.Bomb && IsRocket(sb)))
+            {
+                AddCross(board, clears, b, 1);
+            }
+            else if (sa == Special.Bomb && sb == Special.Bomb)
+            {
+                AddSquare(board, clears, b, 2);
+            }
+            else if (sa == Special.Glider && sb == Special.Glider)
+            {
+                for (int i = 0; i < 3; i++)
+                {
+                    var target = PickTarget(board, new HashSet<Cell>(clears), b);
+                    if (target.HasValue)
+                    {
+                        clears.Add(target.Value);
+                    }
+                }
+            }
+            else
+            {
+                // Glider + rocket or bomb: the glider flies off and the other special goes off where it lands.
+                var carried = sa == Special.Glider ? pb : pa;
+                var target = PickTarget(board, new HashSet<Cell>(clears), b);
+                if (target.HasValue)
+                {
+                    var landed = board[target.Value];
+                    board[target.Value] = Piece.Make(landed.color >= 0 ? landed.color : carried.color, carried.special);
+                    clears.Add(target.Value);
+                }
+            }
+        }
+
+        private static bool IsRocket(Special s) => s == Special.RocketH || s == Special.RocketV;
+
+        /// <summary>Rows and columns through the centre, (2·half + 1) wide.</summary>
+        private static void AddCross(Board board, List<Cell> clears, Cell at, int half)
+        {
+            for (int d = -half; d <= half; d++)
+            {
+                for (int x = 0; x < board.Width; x++)
+                {
+                    clears.Add(new Cell(x, at.y + d));
+                }
+
+                for (int y = 0; y < board.Height; y++)
+                {
+                    clears.Add(new Cell(at.x + d, y));
+                }
+            }
+        }
+
+        private static void AddSquare(Board board, List<Cell> clears, Cell at, int radius)
+        {
+            for (int dy = -radius; dy <= radius; dy++)
+            {
+                for (int dx = -radius; dx <= radius; dx++)
+                {
+                    clears.Add(new Cell(at.x + dx, at.y + dy));
+                }
+            }
+        }
+
+        /// <summary>Turns every plain piece of a colour into a special (rockets alternate direction).</summary>
+        private static void ConvertColor(Board board, int color, Special special)
+        {
+            for (int y = 0; y < board.Height; y++)
+            {
+                for (int x = 0; x < board.Width; x++)
+                {
+                    var p = board[x, y];
+                    if (board.IsPlayable(x, y) && p.color == color && !p.IsSpecial)
+                    {
+                        var kind = IsRocket(special) ? ((x + y) % 2 == 0 ? Special.RocketH : Special.RocketV) : special;
+                        board[x, y] = Piece.Make(color, kind);
+                    }
+                }
+            }
         }
 
         /// <summary>Clears the given cells and creations, then cascades until stable.</summary>
