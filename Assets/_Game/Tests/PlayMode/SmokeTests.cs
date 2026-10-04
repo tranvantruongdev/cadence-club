@@ -16,15 +16,17 @@ namespace CadenceClub.PlayModeTests
 {
     /// <summary>
     /// End-to-end check of the real game: boot, title, the Game scene, then the greedy bot plays moves through the
-    /// actual <see cref="LevelController"/> until the level ends. Fails on any logged error, and on the board view
-    /// drifting from the Core board (the view's resync warning). Screenshots go to Logs/screenshots.
+    /// actual <see cref="LevelController"/> until the level ends — level 1, then the obstacle level. Fails on any
+    /// logged error, and on the board view drifting from the Core board (the view's resync warning).
+    /// Screenshots go to Logs/screenshots.
     /// </summary>
     public class SmokeTests
     {
         private const int MaxMoves = 40;
+        private const BindingFlags Private = BindingFlags.NonPublic | BindingFlags.Instance;
 
         [UnityTest]
-        public IEnumerator Boots_plays_a_level_with_the_bot_and_shows_the_end_card()
+        public IEnumerator Boots_plays_levels_with_the_bot_and_shows_the_end_card()
         {
             int drifts = 0;
             void OnLog(string message, string stack, LogType type)
@@ -43,61 +45,80 @@ namespace CadenceClub.PlayModeTests
                 yield return new WaitForSeconds(0.6f);
                 Capture("0-title");
 
-                Services.Get<GameFlow>().GoToAsync(AppState.Game).Forget();
-                yield return WaitForScene("Game", 20f);
-                yield return new WaitForSeconds(0.6f);
-
+                yield return EnterGame();
                 var controller = Object.FindAnyObjectByType<LevelController>();
-                Assert.IsNotNull(controller, "LevelController should exist in the Game scene");
-                var stateField = typeof(LevelController).GetField("_state", BindingFlags.NonPublic | BindingFlags.Instance);
-                var busyField = typeof(LevelController).GetField("_busy", BindingFlags.NonPublic | BindingFlags.Instance);
-                Assert.IsNotNull(stateField);
-                Assert.IsNotNull(busyField);
-                Capture("1-board");
+                Capture("level1-start");
 
                 // Nobody moves for 5 s: the board hints a move.
-                var board = (BoardView)typeof(LevelController).GetField("_board", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(controller);
+                var board = (BoardView)typeof(LevelController).GetField("_board", Private).GetValue(controller);
                 yield return new WaitForSeconds(5.5f);
                 Assert.IsTrue(board.IsHinting, "a hint should show after 5 s without a move");
-                Capture("1b-hint");
+                Capture("level1-hint");
 
-                var bot = new Bot(BotKind.Greedy, new SeededRandom(7));
-                int moves = 0;
-                var state = (LevelState)stateField.GetValue(controller);
-                while (state.Outcome == LevelOutcome.Playing && moves < MaxMoves)
-                {
-                    var move = bot.Choose(state);
-                    Assert.IsTrue(move.HasValue, "the generator and shuffler should always leave a move");
-                    controller.PlayMove(move.Value.a, move.Value.b);
-                    yield return null;
-                    float t = 0f;
-                    while ((bool)busyField.GetValue(controller))
-                    {
-                        t += Time.unscaledDeltaTime;
-                        Assert.Less(t, 10f, "a move should finish animating within 10 s");
-                        yield return null;
-                    }
+                yield return PlayToEnd(controller, "level1");
+                Assert.AreEqual(0, drifts, "level 1: the board view should match the Core board after every move");
 
-                    moves++;
-                    if (moves == 3)
-                    {
-                        Capture("2-after-moves");
-                    }
-                }
+                yield return Services.Get<GameFlow>().GoToAsync(AppState.Title).ToCoroutine(); // the whole transition: GameFlow ignores requests mid-fade
+                yield return WaitForScene("Title", 20f);
 
-                Assert.AreNotEqual(LevelOutcome.Playing, state.Outcome, $"the level should end within {MaxMoves} moves");
-                Assert.AreEqual(state.MovesUsed, moves, "every bot move should count as one move");
-                Assert.AreEqual(0, drifts, "the board view should match the Core board after every move");
-                yield return new WaitForSecondsRealtime(0.5f);
-                Capture(state.Outcome == LevelOutcome.Won ? "3-won" : "3-lost");
+                // Crates, ice and chains.
+                Levels.Current = Levels.Obstacles();
+                yield return EnterGame();
+                controller = Object.FindAnyObjectByType<LevelController>();
+                Capture("obstacles-start");
+                yield return PlayToEnd(controller, "obstacles");
+                Assert.AreEqual(0, drifts, "obstacles: the board view should match the Core board after every move");
 
-                Services.Get<GameFlow>().GoToAsync(AppState.Title).Forget();
+                yield return Services.Get<GameFlow>().GoToAsync(AppState.Title).ToCoroutine(); // the whole transition: GameFlow ignores requests mid-fade
                 yield return WaitForScene("Title", 20f);
             }
             finally
             {
+                Levels.Current = Levels.First();
                 Application.logMessageReceived -= OnLog;
             }
+        }
+
+        private static IEnumerator EnterGame()
+        {
+            yield return Services.Get<GameFlow>().GoToAsync(AppState.Game).ToCoroutine();
+            yield return WaitForScene("Game", 20f);
+            yield return new WaitForSeconds(0.6f);
+            Assert.IsNotNull(Object.FindAnyObjectByType<LevelController>(), "LevelController should exist in the Game scene");
+        }
+
+        /// <summary>The greedy bot plays through the real controller, one animated move at a time, until the level ends.</summary>
+        private static IEnumerator PlayToEnd(LevelController controller, string name)
+        {
+            var state = (LevelState)typeof(LevelController).GetField("_state", Private).GetValue(controller);
+            var busy = typeof(LevelController).GetField("_busy", Private);
+            var bot = new Bot(BotKind.Greedy, new SeededRandom(7));
+            int moves = 0;
+            while (state.Outcome == LevelOutcome.Playing && moves < MaxMoves)
+            {
+                var move = bot.Choose(state);
+                Assert.IsTrue(move.HasValue, "the generator and shuffler should always leave a move");
+                controller.PlayMove(move.Value.a, move.Value.b);
+                yield return null;
+                float t = 0f;
+                while ((bool)busy.GetValue(controller))
+                {
+                    t += Time.unscaledDeltaTime;
+                    Assert.Less(t, 10f, "a move should finish animating within 10 s");
+                    yield return null;
+                }
+
+                moves++;
+                if (moves == 3)
+                {
+                    Capture($"{name}-after-moves");
+                }
+            }
+
+            Assert.AreNotEqual(LevelOutcome.Playing, state.Outcome, $"{name}: the level should end within {MaxMoves} moves");
+            Assert.AreEqual(state.MovesUsed, moves, $"{name}: every bot move should count as one move");
+            yield return new WaitForSecondsRealtime(0.5f);
+            Capture($"{name}-{(state.Outcome == LevelOutcome.Won ? "won" : "lost")}");
         }
 
         private static IEnumerator WaitForScene(string name, float timeout)

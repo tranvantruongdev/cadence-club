@@ -8,6 +8,12 @@ namespace CadenceClub.Core
     {
         /// <summary>Clear <c>count</c> pieces of <c>color</c>.</summary>
         Collect,
+
+        /// <summary>Break <c>count</c> crates.</summary>
+        Crates,
+
+        /// <summary>Break <c>count</c> ice tiles.</summary>
+        Ice,
     }
 
     [Serializable]
@@ -24,7 +30,7 @@ namespace CadenceClub.Core
     {
         public int id;
 
-        /// <summary>Rows top to bottom: '.' playable, '#' hole.</summary>
+        /// <summary>Rows top to bottom: '.' playable, '#' hole, '1'/'2' crate (hits), 'i' ice, 'l' chained piece.</summary>
         public string[] shape;
 
         public int colors = 4;
@@ -63,6 +69,10 @@ namespace CadenceClub.Core
         }
 
         public static Goal Collect(int color, int count) => new Goal { kind = GoalKind.Collect, color = color, count = count };
+
+        public static Goal BreakCrates(int count) => new Goal { kind = GoalKind.Crates, color = Piece.NoColor, count = count };
+
+        public static Goal ClearIce(int count) => new Goal { kind = GoalKind.Ice, color = Piece.NoColor, count = count };
     }
 
     public enum LevelOutcome
@@ -84,7 +94,7 @@ namespace CadenceClub.Core
             Def = def ?? throw new ArgumentNullException(nameof(def));
             _rng = new SeededRandom(seed ?? def.seed);
             _resolver = new MoveResolver(def.colors, _rng);
-            Board = BoardGenerator.Generate(def.Width, def.Height, def.Playable(), def.colors, _rng);
+            Board = BoardGenerator.Generate(def.Width, def.Height, def.Playable(), def.colors, _rng, def.shape);
             MovesLeft = def.moves;
             _progress = new int[def.goals.Length];
         }
@@ -126,6 +136,21 @@ namespace CadenceClub.Core
             return needed;
         }
 
+        /// <summary>Remaining crates or ice still needed by goals of that kind.</summary>
+        public int Needed(GoalKind kind)
+        {
+            int needed = 0;
+            for (int i = 0; i < Def.goals.Length; i++)
+            {
+                if (Def.goals[i].kind == kind)
+                {
+                    needed += Remaining(i);
+                }
+            }
+
+            return needed;
+        }
+
         public LevelState Clone() => new LevelState(this);
 
         /// <summary>Plays one move. Returns false if the swap is invalid (no move used) or the level is over.</summary>
@@ -146,9 +171,18 @@ namespace CadenceClub.Core
             MovesUsed++;
             for (int i = start; i < events.Count; i++)
             {
-                if (events[i].type == BoardEventType.Cleared)
+                var e = events[i];
+                if (e.type == BoardEventType.Cleared)
                 {
-                    Count(events[i].piece);
+                    Count(GoalKind.Collect, e.piece.color);
+                }
+                else if (e.type == BoardEventType.CrateHit && e.value == 0)
+                {
+                    Count(GoalKind.Crates, Piece.NoColor);
+                }
+                else if (e.type == BoardEventType.IceBroken)
+                {
+                    Count(GoalKind.Ice, Piece.NoColor);
                 }
             }
 
@@ -164,11 +198,13 @@ namespace CadenceClub.Core
             return true;
         }
 
-        private void Count(Piece cleared)
+        private void Count(GoalKind kind, int color)
         {
             for (int g = 0; g < Def.goals.Length; g++)
             {
-                if (Def.goals[g].kind == GoalKind.Collect && Def.goals[g].color == cleared.color && _progress[g] < Def.goals[g].count)
+                var goal = Def.goals[g];
+                bool counts = goal.kind == kind && (kind != GoalKind.Collect || goal.color == color);
+                if (counts && _progress[g] < goal.count)
                 {
                     _progress[g]++;
                 }

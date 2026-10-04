@@ -56,7 +56,8 @@ namespace CadenceClub.UI
             for (int i = 0; i < def.goals.Length; i++)
             {
                 float x = start + i * spacing;
-                var icon = UiFactory.CreateImage(bar, PieceArt.Piece(def.goals[i].color), new Vector2(x, 0f), new Vector2(104f, 104f), Color.white);
+                var tint = def.goals[i].kind == GoalKind.Ice ? new Color(0.45f, 0.7f, 0.95f) : Color.white; // pale ice vanishes on the cream card
+                var icon = UiFactory.CreateImage(bar, PieceArt.GoalIcon(def.goals[i]), new Vector2(x, 0f), new Vector2(104f, 104f), tint);
                 _goalIcons[i] = icon.rectTransform;
                 _goalCounts[i] = UiFactory.CreateText(bar, "", 54, new Vector2(x, -80f), new Vector2(170f, 70f), TextAlignmentOptions.Center, UiFont.Display);
                 _goalCounts[i].color = theme.ink;

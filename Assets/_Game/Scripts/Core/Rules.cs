@@ -32,6 +32,15 @@ namespace CadenceClub.Core
 
         /// <summary>No moves were left, so the board was shuffled; the board now holds the new layout.</summary>
         Shuffled,
+
+        /// <summary>The crate at a took a hit; value = hits left (0 = broken and gone).</summary>
+        CrateHit,
+
+        /// <summary>The ice under a broke (its piece was cleared).</summary>
+        IceBroken,
+
+        /// <summary>The chain at a broke; its piece stays, now free.</summary>
+        ChainBroken,
     }
 
     public struct BoardEvent
@@ -45,67 +54,161 @@ namespace CadenceClub.Core
         public override string ToString() => $"{type} {a} {b} {piece} {value}";
     }
 
-    /// <summary>Pieces fall straight down into empty cells, passing over holes.</summary>
+    /// <summary>
+    /// Settles the board after clears. Pieces fall straight down, passing over holes, and land on crates, chained
+    /// pieces or the bottom; empty cells with an open way to the top are refilled with seeded random colours; an
+    /// empty cell under a crate or chain takes a piece sliding in diagonally from above-left or above-right.
+    /// Repeats until nothing moves, then reports each piece ONCE: Fell from where it started to where it ended, or
+    /// Spawned where it ended, so the view moves every piece with a single tween.
+    /// </summary>
     public static class Gravity
     {
-        public static void Apply(Board board, List<BoardEvent> events)
+        /// <summary>Falls and slides only, no refill (for tests).</summary>
+        public static void Apply(Board board, List<BoardEvent> events) => Settle(board, null, 0, events);
+
+        public static void Settle(Board board, SeededRandom rng, int colors, List<BoardEvent> events)
         {
-            for (int x = 0; x < board.Width; x++)
+            int w = board.Width;
+            int h = board.Height;
+            var start = new Cell[w * h]; // where the piece now in each cell started (or entered, if spawned)
+            var spawned = new bool[w * h];
+            var dropped = new int[w]; // pieces that entered each column, to stack their entry points above the board
+            for (int y = 0; y < h; y++)
             {
-                int write = NextPlayable(board, x, 0);
-                for (int y = 0; y < board.Height; y++)
+                for (int x = 0; x < w; x++)
                 {
-                    if (!board.IsPlayable(x, y) || board[x, y].IsEmpty)
+                    start[y * w + x] = new Cell(x, y);
+                }
+            }
+
+            void Move(int fx, int fy, int tx, int ty)
+            {
+                board[tx, ty] = board[fx, fy];
+                board[fx, fy] = Piece.Empty;
+                start[ty * w + tx] = start[fy * w + fx];
+                spawned[ty * w + tx] = spawned[fy * w + fx];
+            }
+
+            bool Free(int x, int y) => board.IsPlayable(x, y) && !board.IsFixed(x, y) && board[x, y].IsEmpty;
+            bool Movable(int x, int y) => board.IsPlayable(x, y) && !board.IsFixed(x, y) && !board[x, y].IsEmpty;
+
+            // Nothing fixed between (x, y) and the top of the board, so new pieces can drop in.
+            bool OpenAbove(int x, int y)
+            {
+                for (int yy = y + 1; yy < h; yy++)
+                {
+                    if (board.IsPlayable(x, yy) && board.IsFixed(x, yy))
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+
+            for (int guard = 0; guard < w * h * h; guard++)
+            {
+                // Straight down: each free cell takes the nearest piece above it, stopping at anything fixed.
+                for (int x = 0; x < w; x++)
+                {
+                    for (int y = 0; y < h; y++)
+                    {
+                        if (!Free(x, y))
+                        {
+                            continue;
+                        }
+
+                        for (int yy = y + 1; yy < h; yy++)
+                        {
+                            if (!board.IsPlayable(x, yy))
+                            {
+                                continue;
+                            }
+
+                            if (board.IsFixed(x, yy))
+                            {
+                                break;
+                            }
+
+                            if (!board[x, yy].IsEmpty)
+                            {
+                                Move(x, yy, x, y);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // New pieces into free cells open to the top.
+                if (rng != null)
+                {
+                    for (int x = 0; x < w; x++)
+                    {
+                        for (int y = 0; y < h; y++)
+                        {
+                            if (Free(x, y) && OpenAbove(x, y))
+                            {
+                                board[x, y] = Piece.Normal(rng.Range(0, colors));
+                                start[y * w + x] = new Cell(x, h + dropped[x]++);
+                                spawned[y * w + x] = true;
+                            }
+                        }
+                    }
+                }
+
+                // One diagonal slide into the lowest free cell that nothing can reach from straight above.
+                bool slid = false;
+                for (int y = 0; y < h && !slid; y++)
+                {
+                    for (int x = 0; x < w && !slid; x++)
+                    {
+                        if (!Free(x, y) || OpenAbove(x, y))
+                        {
+                            continue;
+                        }
+
+                        foreach (int sx in new[] { x - 1, x + 1 })
+                        {
+                            if (Movable(sx, y + 1))
+                            {
+                                Move(sx, y + 1, x, y);
+                                slid = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (!slid)
+                {
+                    break;
+                }
+            }
+
+            if (events == null)
+            {
+                return;
+            }
+
+            // Bottom rows first: every move goes down, so a cell's old piece has always left before a new one arrives.
+            for (int y = 0; y < h; y++)
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    int i = y * w + x;
+                    var here = new Cell(x, y);
+                    if (!board.IsPlayable(here) || board[here].IsEmpty)
                     {
                         continue;
                     }
 
-                    if (y != write)
+                    if (spawned[i])
                     {
-                        var piece = board[x, y];
-                        board[x, write] = piece;
-                        board[x, y] = Piece.Empty;
-                        events?.Add(new BoardEvent { type = BoardEventType.Fell, a = new Cell(x, y), b = new Cell(x, write), piece = piece });
+                        events.Add(new BoardEvent { type = BoardEventType.Spawned, a = here, b = start[i], piece = board[here] });
                     }
-
-                    write = NextPlayable(board, x, write + 1);
-                }
-            }
-        }
-
-        private static int NextPlayable(Board board, int x, int y)
-        {
-            while (y < board.Height && !board.IsPlayable(x, y))
-            {
-                y++;
-            }
-
-            return y;
-        }
-    }
-
-    /// <summary>Fills empty cells from the top with seeded random colours.</summary>
-    public static class Refill
-    {
-        public static void Apply(Board board, SeededRandom rng, int colors, List<BoardEvent> events)
-        {
-            for (int x = 0; x < board.Width; x++)
-            {
-                int dropped = 0;
-                for (int y = 0; y < board.Height; y++)
-                {
-                    if (board.IsPlayable(x, y) && board[x, y].IsEmpty)
+                    else if (!start[i].Equals(here))
                     {
-                        var piece = Piece.Normal(rng.Range(0, colors));
-                        board[x, y] = piece;
-                        events?.Add(new BoardEvent
-                        {
-                            type = BoardEventType.Spawned,
-                            a = new Cell(x, y),
-                            b = new Cell(x, board.Height + dropped),
-                            piece = piece,
-                        });
-                        dropped++;
+                        events.Add(new BoardEvent { type = BoardEventType.Fell, a = start[i], b = here, piece = board[here] });
                     }
                 }
             }
@@ -233,7 +336,7 @@ namespace CadenceClub.Core
             {
                 // Glider + rocket or bomb: the glider flies off and the other special goes off where it lands.
                 var carried = sa == Special.Glider ? pb : pa;
-                var target = PickTarget(board, new HashSet<Cell>(clears), b);
+                var target = PickTarget(board, new HashSet<Cell>(clears), b, crates: false); // needs a piece to land on
                 if (target.HasValue)
                 {
                     var landed = board[target.Value];
@@ -310,8 +413,7 @@ namespace CadenceClub.Core
 
                 events.Add(new BoardEvent { type = BoardEventType.StepStarted, value = step });
                 ClearAndActivate(board, clears, creations, noBlast, events);
-                Gravity.Apply(board, events);
-                Refill.Apply(board, _rng, _colors, events);
+                Gravity.Settle(board, _rng, _colors, events);
             }
 
             if (!MoveFinder.HasMove(board))
@@ -338,11 +440,18 @@ namespace CadenceClub.Core
         {
             var queue = new Queue<Cell>(initial);
             var done = new HashSet<Cell>();
+            var crateHits = new HashSet<Cell>(); // a crate takes at most one hit per step
             while (queue.Count > 0)
             {
                 var cell = queue.Dequeue();
                 if (!board.IsPlayable(cell) || !done.Add(cell))
                 {
+                    continue;
+                }
+
+                if (board.HasCrate(cell))
+                {
+                    HitCrate(board, cell, crateHits, events); // a blast reached the crate itself
                     continue;
                 }
 
@@ -352,8 +461,29 @@ namespace CadenceClub.Core
                     continue;
                 }
 
+                var cover = board.CoverAt(cell);
+                if (cover.chain)
+                {
+                    // The chain takes the clear; the piece stays, free to move again.
+                    cover.chain = false;
+                    board.SetCover(cell, cover);
+                    events.Add(new BoardEvent { type = BoardEventType.ChainBroken, a = cell, piece = piece });
+                    continue;
+                }
+
                 board[cell] = Piece.Empty;
                 events.Add(new BoardEvent { type = BoardEventType.Cleared, a = cell, piece = piece });
+                if (cover.ice)
+                {
+                    cover.ice = false;
+                    board.SetCover(cell, cover);
+                    events.Add(new BoardEvent { type = BoardEventType.IceBroken, a = cell });
+                }
+
+                HitCrate(board, new Cell(cell.x + 1, cell.y), crateHits, events);
+                HitCrate(board, new Cell(cell.x - 1, cell.y), crateHits, events);
+                HitCrate(board, new Cell(cell.x, cell.y + 1), crateHits, events);
+                HitCrate(board, new Cell(cell.x, cell.y - 1), crateHits, events);
                 if (!piece.IsSpecial)
                 {
                     continue;
@@ -377,6 +507,19 @@ namespace CadenceClub.Core
                 board[group.createAt] = special;
                 events.Add(new BoardEvent { type = BoardEventType.SpecialCreated, a = group.createAt, piece = special });
             }
+        }
+
+        private static void HitCrate(Board board, Cell cell, HashSet<Cell> crateHits, List<BoardEvent> events)
+        {
+            if (!board.HasCrate(cell) || !crateHits.Add(cell))
+            {
+                return;
+            }
+
+            var cover = board.CoverAt(cell);
+            cover.crate--;
+            board.SetCover(cell, cover);
+            events.Add(new BoardEvent { type = BoardEventType.CrateHit, a = cell, value = cover.crate });
         }
 
         /// <summary>Cells a special clears when it goes off.</summary>
@@ -439,15 +582,18 @@ namespace CadenceClub.Core
             }
         }
 
-        private Cell? PickTarget(Board board, HashSet<Cell> done, Cell from)
+        /// <summary>A random piece (or crate, when <paramref name="crates"/>) for a glider to fly to.</summary>
+        private Cell? PickTarget(Board board, HashSet<Cell> done, Cell from, bool crates = true)
         {
+            // ponytail: random target; aim at goal pieces and obstacles once the resolver knows the level's goals.
             var candidates = new List<Cell>();
             for (int y = 0; y < board.Height; y++)
             {
                 for (int x = 0; x < board.Width; x++)
                 {
                     var c = new Cell(x, y);
-                    if (board.IsPlayable(c) && !board[c].IsEmpty && !done.Contains(c) && !c.IsAdjacentTo(from))
+                    bool target = !board[c].IsEmpty || (crates && board.HasCrate(c));
+                    if (board.IsPlayable(c) && target && !done.Contains(c) && !c.IsAdjacentTo(from))
                     {
                         candidates.Add(c);
                     }
@@ -512,7 +658,8 @@ namespace CadenceClub.Core
     public static class MoveFinder
     {
         public static bool CanSwap(Board board, Cell a, Cell b) =>
-            a.IsAdjacentTo(b) && board.IsPlayable(a) && board.IsPlayable(b) && !board[a].IsEmpty && !board[b].IsEmpty;
+            a.IsAdjacentTo(b) && board.IsPlayable(a) && board.IsPlayable(b) && !board[a].IsEmpty && !board[b].IsEmpty
+            && !board.IsLocked(a) && !board.IsLocked(b);
 
         /// <summary>A swap counts if it makes a match, or involves a disco, or swaps two specials.</summary>
         public static bool IsValid(Board board, Cell a, Cell b)
@@ -578,7 +725,7 @@ namespace CadenceClub.Core
         }
     }
 
-    /// <summary>Rearranges the pieces until there is no match on the board and at least one move.</summary>
+    /// <summary>Rearranges the free pieces (chained ones stay) until there is no match on the board and at least one move.</summary>
     public static class Shuffler
     {
         public static void Shuffle(Board board, SeededRandom rng, int colors)
@@ -589,7 +736,7 @@ namespace CadenceClub.Core
             {
                 for (int x = 0; x < board.Width; x++)
                 {
-                    if (board.IsPlayable(x, y) && !board[x, y].IsEmpty)
+                    if (board.IsPlayable(x, y) && !board[x, y].IsEmpty && !board.IsLocked(new Cell(x, y)))
                     {
                         cells.Add(new Cell(x, y));
                         pieces.Add(board[x, y]);
@@ -619,9 +766,15 @@ namespace CadenceClub.Core
     /// <summary>Deals a starting board: no matches, at least one move, same seed → same board.</summary>
     public static class BoardGenerator
     {
-        public static Board Generate(int width, int height, bool[] playable, int colors, SeededRandom rng)
+        /// <param name="covers">Optional level shape rows with crates, ice and chains (see <see cref="Board.ApplyCovers"/>).</param>
+        public static Board Generate(int width, int height, bool[] playable, int colors, SeededRandom rng, string[] covers = null)
         {
             var board = new Board(width, height, playable);
+            if (covers != null)
+            {
+                board.ApplyCovers(covers);
+            }
+
             Fill(board, rng, colors, keepSpecials: false);
             return board;
         }
@@ -640,7 +793,7 @@ namespace CadenceClub.Core
                 {
                     for (int x = 0; x < board.Width; x++)
                     {
-                        if (!board.IsPlayable(x, y) || (keepSpecials && board[x, y].IsSpecial))
+                        if (!board.IsPlayable(x, y) || board.HasCrate(x, y) || (keepSpecials && board[x, y].IsSpecial))
                         {
                             continue;
                         }

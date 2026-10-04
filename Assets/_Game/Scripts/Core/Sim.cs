@@ -81,8 +81,25 @@ namespace CadenceClub.Core
             MoveResolver.Swap(board, a, b);
             var groups = MatchFinder.Find(board, a, b);
             int score = 0;
+            bool wantIce = state.Needed(GoalKind.Ice) > 0;
+            bool wantCrates = state.Needed(GoalKind.Crates) > 0;
+            var crates = new HashSet<Cell>();
             foreach (var g in groups)
             {
+                foreach (var c in g.cells)
+                {
+                    var cover = board.CoverAt(c);
+                    score += wantIce && cover.ice ? 5 : 0;
+                    score += cover.chain ? 2 : 0; // frees a locked piece
+                    if (wantCrates)
+                    {
+                        foreach (var n in new[] { new Cell(c.x + 1, c.y), new Cell(c.x - 1, c.y), new Cell(c.x, c.y + 1), new Cell(c.x, c.y - 1) })
+                        {
+                            score += board.HasCrate(n) && crates.Add(n) ? 5 : 0;
+                        }
+                    }
+                }
+
                 score += g.cells.Count + 3 * Math.Min(g.cells.Count, state.NeededOf(g.color));
                 score += g.creates == Special.Disco ? 20
                     : g.creates == Special.Bomb ? 12

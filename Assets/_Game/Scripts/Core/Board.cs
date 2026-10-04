@@ -67,6 +67,28 @@ namespace CadenceClub.Core
     }
 
     /// <summary>
+    /// What lies on a cell besides its piece. A crate fills the cell (no piece) and takes 1–2 hits; ice lies under the
+    /// piece and breaks when that piece is cleared; a chain locks the piece (no swapping, no falling) until a clear
+    /// breaks it, and the piece stays.
+    /// </summary>
+    public struct Cover : IEquatable<Cover>
+    {
+        /// <summary>Hits left before the crate breaks; 0 = no crate.</summary>
+        public int crate;
+
+        public bool ice;
+        public bool chain;
+
+        public bool IsEmpty => crate == 0 && !ice && !chain;
+
+        public bool Equals(Cover other) => crate == other.crate && ice == other.ice && chain == other.chain;
+
+        public override bool Equals(object obj) => obj is Cover other && Equals(other);
+
+        public override int GetHashCode() => crate * 4 + (ice ? 2 : 0) + (chain ? 1 : 0);
+    }
+
+    /// <summary>
     /// The playing grid. (0,0) is the bottom-left; y grows upward, so gravity pulls toward y = 0.
     /// Holes are cells outside the board shape: never playable, never filled.
     /// </summary>
@@ -74,6 +96,7 @@ namespace CadenceClub.Core
     {
         private readonly bool[] _playable;
         private readonly Piece[] _pieces;
+        private readonly Cover[] _covers;
 
         public Board(int width, int height, bool[] playable = null)
         {
@@ -86,6 +109,7 @@ namespace CadenceClub.Core
             Height = height;
             _playable = new bool[width * height];
             _pieces = new Piece[width * height];
+            _covers = new Cover[width * height];
             for (int i = 0; i < _pieces.Length; i++)
             {
                 _playable[i] = playable == null || playable[i];
@@ -122,20 +146,86 @@ namespace CadenceClub.Core
             set => this[c.x, c.y] = value;
         }
 
+        public Cover CoverAt(int x, int y) => InBounds(x, y) ? _covers[y * Width + x] : default;
+
+        public Cover CoverAt(Cell c) => CoverAt(c.x, c.y);
+
+        public void SetCover(Cell c, Cover cover)
+        {
+            if (!IsPlayable(c))
+            {
+                throw new ArgumentOutOfRangeException(nameof(c), $"{c} is not a playable cell");
+            }
+
+            _covers[c.y * Width + c.x] = cover;
+        }
+
+        public bool HasCrate(int x, int y) => CoverAt(x, y).crate > 0;
+
+        public bool HasCrate(Cell c) => HasCrate(c.x, c.y);
+
+        public bool IsLocked(Cell c) => CoverAt(c).chain;
+
+        /// <summary>Holds its place: a crate, or a chained piece. Pieces land on it and never pass through.</summary>
+        public bool IsFixed(int x, int y)
+        {
+            var cover = CoverAt(x, y);
+            return cover.crate > 0 || cover.chain;
+        }
+
+        /// <summary>
+        /// Lays covers from rows written top to bottom (the level shape): '1'/'2' crate with that many hits,
+        /// 'i' ice, 'l' chain; anything else adds nothing. Crate cells lose their piece.
+        /// </summary>
+        public void ApplyCovers(string[] rowsTopToBottom)
+        {
+            for (int row = 0; row < Height; row++)
+            {
+                int y = Height - 1 - row;
+                for (int x = 0; x < Width; x++)
+                {
+                    char c = rowsTopToBottom[row][x];
+                    if (!IsPlayable(x, y))
+                    {
+                        continue;
+                    }
+
+                    var cover = CoverAt(x, y);
+                    if (c == '1' || c == '2')
+                    {
+                        cover.crate = c - '0';
+                        _pieces[y * Width + x] = Piece.Empty;
+                    }
+                    else if (c == 'i')
+                    {
+                        cover.ice = true;
+                    }
+                    else if (c == 'l')
+                    {
+                        cover.chain = true;
+                    }
+
+                    _covers[y * Width + x] = cover;
+                }
+            }
+        }
+
         public Board Clone()
         {
             var copy = new Board(Width, Height, _playable);
             Array.Copy(_pieces, copy._pieces, _pieces.Length);
+            Array.Copy(_covers, copy._covers, _covers.Length);
             return copy;
         }
 
+        /// <summary>Every playable cell holds a piece or a crate.</summary>
         public bool IsFull()
         {
             for (int y = 0; y < Height; y++)
             {
                 for (int x = 0; x < Width; x++)
                 {
-                    if (IsPlayable(x, y) && this[x, y].IsEmpty)
+                    if (IsPlayable(x, y) && this[x, y].IsEmpty && !HasCrate(x, y))
                     {
                         return false;
                     }
@@ -189,7 +279,7 @@ namespace CadenceClub.Core
             return board;
         }
 
-        /// <summary>Rows top to bottom: colour letters, '*' coloured special, '@' disco, '.' empty, '#' hole.</summary>
+        /// <summary>Rows top to bottom: colour letters, '*' coloured special, '@' disco, '.' empty, '#' hole, '1'/'2' crate.</summary>
         public string[] ToRows()
         {
             var rows = new string[Height];
@@ -202,6 +292,7 @@ namespace CadenceClub.Core
                 {
                     var p = this[x, y];
                     sb.Append(!IsPlayable(x, y) ? '#'
+                        : HasCrate(x, y) ? (char)('0' + CoverAt(x, y).crate)
                         : p.IsEmpty ? '.'
                         : p.special == Special.Disco ? '@'
                         : p.special != Special.None ? '*'

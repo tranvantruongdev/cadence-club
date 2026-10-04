@@ -27,8 +27,11 @@ namespace CadenceClub.Art
 
         private static readonly Dictionary<int, Sprite> Pieces = new Dictionary<int, Sprite>();
         private static readonly Dictionary<Special, Sprite> Marks = new Dictionary<Special, Sprite>();
+        private static readonly Dictionary<int, Sprite> Crates = new Dictionary<int, Sprite>();
         private static Sprite _disco;
         private static Sprite _cell;
+        private static Sprite _ice;
+        private static Sprite _chain;
 
         public static Sprite Piece(int color)
         {
@@ -61,6 +64,27 @@ namespace CadenceClub.Art
 
         /// <summary>Rounded tile behind each playable cell.</summary>
         public static Sprite CellTile => _cell != null ? _cell : (_cell = DrawMask("Cell", (x, y) => RoundedBox(x, y, 0.94f, 0.94f, 0.22f), Color.white));
+
+        /// <summary>A wooden crate: whole with two hits left, cracked with one.</summary>
+        public static Sprite Crate(int hits)
+        {
+            hits = Mathf.Clamp(hits, 1, 2);
+            if (!Crates.TryGetValue(hits, out var sprite) || sprite == null)
+            {
+                Crates[hits] = sprite = DrawCrate(hits);
+            }
+
+            return sprite;
+        }
+
+        /// <summary>Pale translucent ice; drawn under the piece, so it shows as a frosted frame around it.</summary>
+        public static Sprite Ice => _ice != null ? _ice : (_ice = DrawIce());
+
+        /// <summary>Two crossed steel chains, drawn over a locked piece.</summary>
+        public static Sprite Chain => _chain != null ? _chain : (_chain = Draw("Chain", (x, y) => Mathf.Min(ChainLine(x, y), ChainLine(x, -y)), Hex(0x9AA3AE)));
+
+        public static Sprite GoalIcon(Goal goal) =>
+            goal.kind == GoalKind.Crates ? Crate(2) : goal.kind == GoalKind.Ice ? Ice : Piece(goal.color);
 
         private static float Shape(int color, float x, float y)
         {
@@ -173,6 +197,99 @@ namespace CadenceClub.Art
             }
 
             return Finish(texture, pixels);
+        }
+
+        private static Sprite DrawCrate(int hits)
+        {
+            var texture = NewTexture($"Crate{hits}");
+            var pixels = new Color32[Size * Size];
+            var wood = Hex(0xC8874A);
+            var frame = Hex(0xE0A66A);
+            var dark = Hex(0x6E4221);
+            for (int py = 0; py < Size; py++)
+            {
+                for (int px = 0; px < Size; px++)
+                {
+                    float x = (px + 0.5f) / Size * 2f - 1f;
+                    float y = (py + 0.5f) / Size * 2f - 1f;
+                    float outer = RoundedBox(x, y, 0.9f, 0.9f, 0.14f);
+                    float alpha = Mathf.Clamp01(0.5f - outer * Size * 0.5f);
+                    if (alpha <= 0f)
+                    {
+                        pixels[py * Size + px] = new Color32(0, 0, 0, 0);
+                        continue;
+                    }
+
+                    float inner = RoundedBox(x, y, 0.66f, 0.66f, 0.05f);
+                    Color c;
+                    if (inner > 0f)
+                    {
+                        c = frame;
+                    }
+                    else
+                    {
+                        // Planks, plus a diagonal brace across them.
+                        float plank = Mathf.Abs(Mathf.Repeat(y + 0.66f, 0.44f) - 0.22f);
+                        c = plank > 0.2f ? dark : wood;
+                        c = Mathf.Abs(x - y) * 0.7071f < 0.1f ? frame : c;
+                    }
+
+                    c = Mathf.Abs(inner) < 0.03f ? dark : c; // seam between frame and planks
+                    c = Color.Lerp(dark, c, Mathf.Clamp01(-outer / 0.07f)); // dark outer rim
+                    if (hits == 1 && Mathf.Abs(y - 0.1f - 0.2f * Mathf.Sin(x * 10f)) < 0.04f && Mathf.Abs(x) < 0.7f)
+                    {
+                        c = dark; // a crack after the first hit
+                    }
+
+                    c *= 0.82f + 0.18f * (y + 1f) * 0.5f; // lit from above
+                    c.a = alpha;
+                    pixels[py * Size + px] = c;
+                }
+            }
+
+            return Finish(texture, pixels);
+        }
+
+        private static Sprite DrawIce()
+        {
+            var texture = NewTexture("Ice");
+            var pixels = new Color32[Size * Size];
+            var ice = new Color(0.78f, 0.92f, 1f);
+            for (int py = 0; py < Size; py++)
+            {
+                for (int px = 0; px < Size; px++)
+                {
+                    float x = (px + 0.5f) / Size * 2f - 1f;
+                    float y = (py + 0.5f) / Size * 2f - 1f;
+                    float d = RoundedBox(x, y, 0.93f, 0.93f, 0.2f);
+                    float alpha = Mathf.Clamp01(0.5f - d * Size * 0.5f);
+                    var c = Color.Lerp(ice, Color.white, Mathf.Clamp01(1f + d / 0.08f)); // bright rim
+                    float glint = Mathf.Min(Mathf.Abs(x + y + 0.9f), Mathf.Abs(x + y + 0.55f) + 0.02f);
+                    c = glint < 0.05f ? Color.white : c;
+                    c.a = alpha * (d > -0.08f ? 0.9f : glint < 0.05f ? 0.75f : 0.55f);
+                    pixels[py * Size + px] = c;
+                }
+            }
+
+            return Finish(texture, pixels);
+        }
+
+        /// <summary>One chain along the rising diagonal: links alternate face-on (rings) and side-on (bars).</summary>
+        private static float ChainLine(float x, float y)
+        {
+            float u = (x + y) * 0.7071f;
+            float v = (x - y) * 0.7071f;
+            if (Mathf.Abs(u) > 0.92f)
+            {
+                return 1f;
+            }
+
+            const float pitch = 0.3f;
+            float local = Mathf.Repeat(u + pitch * 0.5f, pitch) - pitch * 0.5f;
+            bool faceOn = Mathf.FloorToInt((u + pitch * 0.5f) / pitch) % 2 == 0;
+            return faceOn
+                ? Mathf.Abs(RoundedBox(local, v, 0.17f, 0.11f, 0.1f)) - 0.035f
+                : RoundedBox(local, v, 0.17f, 0.035f, 0.035f);
         }
 
         private static float RoundedBox(float x, float y, float halfW, float halfH, float radius)

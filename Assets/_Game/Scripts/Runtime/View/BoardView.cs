@@ -25,6 +25,11 @@ namespace CadenceClub.View
         private readonly Dictionary<Cell, PieceView> _pieces = new Dictionary<Cell, PieceView>();
         private readonly Stack<PieceView> _pool = new Stack<PieceView>();
         private readonly List<PieceView> _clearing = new List<PieceView>();
+        private readonly Dictionary<Cell, SpriteRenderer> _crates = new Dictionary<Cell, SpriteRenderer>();
+        private readonly Dictionary<Cell, SpriteRenderer> _ice = new Dictionary<Cell, SpriteRenderer>();
+        private readonly Dictionary<Cell, SpriteRenderer> _chains = new Dictionary<Cell, SpriteRenderer>();
+        private readonly List<SpriteRenderer> _breaking = new List<SpriteRenderer>();
+        private Transform _coverRoot;
         private Vector2 _origin;
         private Transform _pieceRoot;
         private Board _board;
@@ -86,6 +91,8 @@ namespace CadenceClub.View
 
             _pieceRoot = new GameObject("Pieces").transform;
             _pieceRoot.SetParent(transform, false);
+            _coverRoot = new GameObject("Covers").transform;
+            _coverRoot.SetParent(transform, false);
             Sync(board);
         }
 
@@ -110,6 +117,71 @@ namespace CadenceClub.View
                         _pieces[cell] = Spawn(board[cell], CellToWorld(cell));
                     }
                 }
+            }
+
+            SyncCovers(board);
+        }
+
+        /// <summary>Crates sit in place of a piece, ice under it (order 5), chains over it (order 12).</summary>
+        private void SyncCovers(Board board)
+        {
+            foreach (var map in new[] { _crates, _ice, _chains })
+            {
+                foreach (var r in map.Values)
+                {
+                    Destroy(r.gameObject);
+                }
+
+                map.Clear();
+            }
+
+            for (int y = 0; y < board.Height; y++)
+            {
+                for (int x = 0; x < board.Width; x++)
+                {
+                    var cell = new Cell(x, y);
+                    var cover = board.CoverAt(cell);
+                    if (!board.IsPlayable(cell) || cover.IsEmpty)
+                    {
+                        continue;
+                    }
+
+                    if (cover.crate > 0)
+                    {
+                        _crates[cell] = CoverSprite("Crate", cell, PieceArt.Crate(cover.crate), 10, 0.92f);
+                    }
+
+                    if (cover.ice)
+                    {
+                        _ice[cell] = CoverSprite("Ice", cell, PieceArt.Ice, 5, 1f);
+                    }
+
+                    if (cover.chain)
+                    {
+                        _chains[cell] = CoverSprite("Chain", cell, PieceArt.Chain, 12, 0.95f);
+                    }
+                }
+            }
+        }
+
+        private SpriteRenderer CoverSprite(string name, Cell cell, Sprite sprite, int order, float scale)
+        {
+            var r = new GameObject($"{name} {cell.x},{cell.y}").AddComponent<SpriteRenderer>();
+            r.transform.SetParent(_coverRoot, false);
+            r.transform.position = CellToWorld(cell);
+            r.transform.localScale = Vector3.one * scale;
+            r.sprite = sprite;
+            r.sortingOrder = order;
+            return r;
+        }
+
+        /// <summary>Takes a cover out of its map and shrinks it away as part of the clear phase.</summary>
+        private void Break(Dictionary<Cell, SpriteRenderer> map, Cell cell, Sequence clears)
+        {
+            if (map.Remove(cell, out var r))
+            {
+                _breaking.Add(r);
+                clears.Group(Tween.Scale(r.transform, 0f, ClearSeconds, Ease.InBack));
             }
         }
 
@@ -214,6 +286,8 @@ namespace CadenceClub.View
             // Phase 1: clears (all at once), specials going off, then new specials popping in.
             var clears = Sequence.Create();
             _clearing.Clear();
+            _breaking.Clear();
+            bool anyClear = false;
             var created = new List<BoardEvent>();
             for (int i = from; i < to; i++)
             {
@@ -223,6 +297,19 @@ namespace CadenceClub.View
                     _pieces.Remove(e.a);
                     _clearing.Add(view);
                     clears.Group(Tween.Scale(view.root, 0f, ClearSeconds, Ease.InBack));
+                    anyClear = true;
+                }
+                else if (e.type == BoardEventType.CrateHit && e.value > 0 && _crates.TryGetValue(e.a, out var crate))
+                {
+                    crate.sprite = PieceArt.Crate(e.value);
+                    clears.Group(Tween.Scale(crate.transform, 1.06f, ClearSeconds * 0.5f, Ease.OutQuad, 2, CycleMode.Yoyo));
+                    anyClear = true;
+                }
+                else if (e.type == BoardEventType.CrateHit || e.type == BoardEventType.IceBroken || e.type == BoardEventType.ChainBroken)
+                {
+                    var map = e.type == BoardEventType.CrateHit ? _crates : e.type == BoardEventType.IceBroken ? _ice : _chains;
+                    Break(map, e.a, clears);
+                    anyClear = true;
                 }
                 else if (e.type == BoardEventType.SpecialActivated && (e.piece.special == Special.Bomb || e.piece.special == Special.Disco))
                 {
@@ -234,7 +321,7 @@ namespace CadenceClub.View
                 }
             }
 
-            if (_clearing.Count > 0)
+            if (anyClear)
             {
                 await clears;
                 foreach (var view in _clearing)
@@ -242,7 +329,13 @@ namespace CadenceClub.View
                     Release(view);
                 }
 
+                foreach (var r in _breaking)
+                {
+                    Destroy(r.gameObject);
+                }
+
                 _clearing.Clear();
+                _breaking.Clear();
             }
             else
             {
@@ -254,6 +347,11 @@ namespace CadenceClub.View
                 var pops = Sequence.Create();
                 foreach (var e in created)
                 {
+                    if (_pieces.TryGetValue(e.a, out var kept))
+                    {
+                        Release(kept); // a chained piece survived its clear; the new special replaces it
+                    }
+
                     var view = Spawn(e.piece, CellToWorld(e.a));
                     view.root.localScale = Vector3.zero;
                     _pieces[e.a] = view;
@@ -332,6 +430,12 @@ namespace CadenceClub.View
                         {
                             return false;
                         }
+                    }
+
+                    var cover = board.CoverAt(cell);
+                    if ((cover.crate > 0) != _crates.ContainsKey(cell) || cover.ice != _ice.ContainsKey(cell) || cover.chain != _chains.ContainsKey(cell))
+                    {
+                        return false;
                     }
                 }
             }
