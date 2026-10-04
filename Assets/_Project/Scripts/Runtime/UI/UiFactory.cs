@@ -30,6 +30,12 @@ namespace Template.UI
 
         private static UiTheme Theme => UiTheme.Current;
 
+        /// <summary>
+        /// Every label <see cref="CreateText"/> makes goes through this, so a game can translate the template's own
+        /// screens (Settings) by setting it. Unknown text should come back unchanged.
+        /// </summary>
+        public static Func<string, string> Localize = text => text;
+
         public static Color Accent => Theme.accent;
         public static Color Ink => Theme.ink;
         public static Color Muted => Theme.muted;
@@ -164,7 +170,7 @@ namespace Template.UI
 
             var label = rect.gameObject.AddComponent<TextMeshProUGUI>();
             label.font = Theme.Font(font);
-            label.text = text;
+            label.text = Localize(text);
             label.fontSize = fontSize;
             label.alignment = alignment;
             label.color = Theme.textOnDark;

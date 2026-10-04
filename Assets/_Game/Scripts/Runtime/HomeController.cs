@@ -40,6 +40,7 @@ namespace CadenceClub
         private TextMeshProUGUI _gems;
         private float _refresh;
         private bool _leaving;
+        private string _builtIn; // the language Home's labels were built in
 
         private void Start()
         {
@@ -53,6 +54,7 @@ namespace CadenceClub
             camera.backgroundColor = ClubUi.Night;
 
             var theme = UiTheme.Current;
+            _builtIn = Loc.Language;
             UiFactory.EnsureEventSystem();
             var canvas = UiFactory.CreateCanvas("Home UI");
             _stack = canvas.gameObject.AddComponent<ScreenStack>();
@@ -108,14 +110,14 @@ namespace CadenceClub
         {
             var theme = UiTheme.Current;
             var md = Club.Master;
-            var riders = UiFactory.CreateButton(_safe, "Riders", Vector2.zero, new Vector2(300f, 130f), () => _riders.OpenAsync().Forget(),
+            var riders = UiFactory.CreateButton(_safe, Loc.T("Riders"), Vector2.zero, new Vector2(300f, 130f), () => _riders.OpenAsync().Forget(),
                 ButtonStyle.Secondary, theme.iconTrophy);
             UiFactory.Place(riders, new Vector2(0.5f, 0f), new Vector2(-320f, 430f));
             bool open = Club.Data.RecruitUnlocked(md);
-            var recruit = UiFactory.CreateButton(_safe, open ? "Recruit" : $"Lv {md.Int("recruit_after_level") + 1}", Vector2.zero,
+            var recruit = UiFactory.CreateButton(_safe, open ? Loc.T("Recruit") : Loc.F("Lv {0}", md.Int("recruit_after_level") + 1), Vector2.zero,
                 new Vector2(300f, 130f), () => OpenRecruit(open), open ? ButtonStyle.Primary : ButtonStyle.Secondary, theme.iconStar);
             UiFactory.Place(recruit, new Vector2(0.5f, 0f), new Vector2(0f, 430f));
-            var shop = UiFactory.CreateButton(_safe, "Shop", Vector2.zero, new Vector2(300f, 130f), () => _shop.OpenAsync().Forget(),
+            var shop = UiFactory.CreateButton(_safe, Loc.T("Shop"), Vector2.zero, new Vector2(300f, 130f), () => _shop.OpenAsync().Forget(),
                 ButtonStyle.Secondary, PieceArt.Gem).FullColourIcon();
             UiFactory.Place(shop, new Vector2(0.5f, 0f), new Vector2(320f, 430f));
         }
@@ -169,12 +171,12 @@ namespace CadenceClub
             int built = tasks.Count(t => club.IsBuilt(t.id));
 
             _area = UiFactory.CreateCard(_safe, new Vector2(0f, 180f), new Vector2(1000f, 920f));
-            UiFactory.CreateText(_area, $"{area.id} · {area.name}", 72, new Vector2(-90f, 370f), new Vector2(760f, 110f), TextAlignmentOptions.MidlineLeft,
+            UiFactory.CreateText(_area, $"{area.id} · {Loc.T(area.name)}", 72, new Vector2(-90f, 370f), new Vector2(760f, 110f), TextAlignmentOptions.MidlineLeft,
                 UiFont.Display).color = theme.ink;
             UiFactory.CreateImage(_area, theme.iconStar, new Vector2(330f, 372f), new Vector2(64f, 64f), theme.accentEdge);
             UiFactory.CreateText(_area, club.stars.ToString(), 60, new Vector2(410f, 372f), new Vector2(120f, 90f), TextAlignmentOptions.MidlineLeft, UiFont.Display)
                 .color = theme.ink;
-            UiFactory.CreateText(_area, $"{built} of {tasks.Count} restored", 38, new Vector2(-90f, 295f), new Vector2(760f, 60f), TextAlignmentOptions.MidlineLeft)
+            UiFactory.CreateText(_area, Loc.F("{0} of {1} restored", built, tasks.Count), 38, new Vector2(-90f, 295f), new Vector2(760f, 60f), TextAlignmentOptions.MidlineLeft)
                 .color = theme.muted;
             UiFactory.CreateRounded(_area, new Vector2(0f, 240f), new Vector2(880f, 22f), theme.paperEdge, 11);
             if (built > 0)
@@ -228,15 +230,15 @@ namespace CadenceClub
             if (built)
             {
                 UiFactory.CreateImage(tile, theme.iconCheck, new Vector2(-160f, 0f), new Vector2(70f, 70f), new Color(0.25f, 0.62f, 0.33f));
-                UiFactory.CreateText(tile, task.name, 40, new Vector2(40f, 0f), new Vector2(320f, 160f), TextAlignmentOptions.MidlineLeft, UiFont.Display)
+                UiFactory.CreateText(tile, Loc.T(task.name), 40, new Vector2(40f, 0f), new Vector2(320f, 160f), TextAlignmentOptions.MidlineLeft, UiFont.Display)
                     .color = theme.ink;
             }
             else
             {
-                UiFactory.CreateText(tile, task.name, 38, new Vector2(0f, 45f), new Vector2(400f, 70f), TextAlignmentOptions.Center, UiFont.Display)
+                UiFactory.CreateText(tile, Loc.T(task.name), 38, new Vector2(0f, 45f), new Vector2(400f, 70f), TextAlignmentOptions.Center, UiFont.Display)
                     .color = theme.muted;
                 bool affordable = club.stars >= task.stars;
-                UiFactory.CreateButton(tile, $"Build · {task.stars}", new Vector2(0f, -40f), new Vector2(250f, 84f), () => Build(task),
+                UiFactory.CreateButton(tile, Loc.F("Build · {0}", task.stars), new Vector2(0f, -40f), new Vector2(250f, 84f), () => Build(task),
                     affordable ? ButtonStyle.Primary : ButtonStyle.Secondary, theme.iconStar);
             }
 
@@ -271,7 +273,7 @@ namespace CadenceClub
             _play = UiFactory.CreateRect("Play", _safe);
             _play.sizeDelta = new Vector2(700f, 170f);
             UiFactory.Place(_play, new Vector2(0.5f, 0f), new Vector2(0f, 230f));
-            UiFactory.CreateButton(_play, allDone ? $"Play level {Levels.Count} again" : $"Play level {next}", Vector2.zero, new Vector2(700f, 170f),
+            UiFactory.CreateButton(_play, allDone ? Loc.F("Play level {0} again", Levels.Count) : Loc.F("Play level {0}", next), Vector2.zero, new Vector2(700f, 170f),
                 () => _levelStart.OpenAsync(Levels.Load(next)).Forget(), ButtonStyle.Primary, theme.iconPlay);
             if (!JuiceFx.ReduceMotion)
             {
@@ -303,8 +305,14 @@ namespace CadenceClub
         {
             _settingsPresenter?.Dispose();
             _settingsPresenter = null;
-            Services.Get<SettingsService>().Commit();
+            var settings = Services.Get<SettingsService>();
+            settings.Commit();
             await _stack.PopAsync();
+            if (settings.Current.language != _builtIn && !_leaving)
+            {
+                _leaving = true;
+                Services.Get<GameFlow>().GoToAsync(AppState.Title).Forget(); // every label is built once: rebuild Home in the new language
+            }
         }
 
         private void OnDestroy()

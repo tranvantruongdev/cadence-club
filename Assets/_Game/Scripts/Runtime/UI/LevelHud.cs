@@ -70,7 +70,7 @@ namespace CadenceClub.UI
             UiFactory.AddShadow(bar, Vector2.zero, bar.sizeDelta, 40, 0.3f, 10f);
             UiFactory.CreateRounded(bar, Vector2.zero, bar.sizeDelta, theme.paper, 40);
 
-            UiFactory.CreateText(bar, $"LEVEL {def.id}", 34, new Vector2(-200f, 78f), new Vector2(500f, 50f)).color = theme.muted;
+            UiFactory.CreateText(bar, Loc.F("LEVEL {0}", def.id), 34, new Vector2(-200f, 78f), new Vector2(500f, 50f)).color = theme.muted;
             _goalCounts = new TextMeshProUGUI[def.goals.Length];
             _goalChecks = new Image[def.goals.Length];
             _goalIcons = new RectTransform[def.goals.Length];
@@ -89,7 +89,7 @@ namespace CadenceClub.UI
             }
 
             UiFactory.CreateRounded(bar, new Vector2(260f, 0f), new Vector2(4f, 170f), new Color(0f, 0f, 0f, 0.12f), 2);
-            UiFactory.CreateText(bar, "MOVES", 34, new Vector2(370f, 78f), new Vector2(240f, 50f)).color = theme.muted;
+            UiFactory.CreateText(bar, Loc.T("MOVES"), 34, new Vector2(370f, 78f), new Vector2(240f, 50f)).color = theme.muted;
             _moves = UiFactory.CreateText(bar, "", 110, new Vector2(370f, -12f), new Vector2(240f, 140f), TextAlignmentOptions.Center, UiFont.Display);
             _moves.color = theme.ink;
 
@@ -116,13 +116,13 @@ namespace CadenceClub.UI
             _endBody.fontSizeMin = 30f;
             _endBody.fontSizeMax = 46f;
             // ShowEnd stacks whichever of these apply, top down.
-            _next = UiFactory.CreateButton(_endCard, "Next level", Vector2.zero, new Vector2(680f, 140f), () => NextPressed?.Invoke(),
+            _next = UiFactory.CreateButton(_endCard, Loc.T("Next level"), Vector2.zero, new Vector2(680f, 140f), () => NextPressed?.Invoke(),
                 ButtonStyle.Primary, theme.iconPlay).gameObject;
-            _continue = UiFactory.CreateButton(_endCard, "+5 moves", Vector2.zero, new Vector2(680f, 140f), () => ContinuePressed?.Invoke(),
+            _continue = UiFactory.CreateButton(_endCard, Loc.F("+{0} moves", 5), Vector2.zero, new Vector2(680f, 140f), () => ContinuePressed?.Invoke(),
                 ButtonStyle.Primary, PieceArt.Coin).FullColourIcon().gameObject;
-            _retry = UiFactory.CreateButton(_endCard, "Play again", Vector2.zero, new Vector2(680f, 120f), () => RetryPressed?.Invoke(),
+            _retry = UiFactory.CreateButton(_endCard, Loc.T("Play again"), Vector2.zero, new Vector2(680f, 120f), () => RetryPressed?.Invoke(),
                 ButtonStyle.Secondary, theme.iconRetry).gameObject;
-            _home = UiFactory.CreateButton(_endCard, "Home", Vector2.zero, new Vector2(680f, 120f), () => HomePressed?.Invoke(),
+            _home = UiFactory.CreateButton(_endCard, Loc.T("Home"), Vector2.zero, new Vector2(680f, 120f), () => HomePressed?.Invoke(),
                 ButtonStyle.Secondary, theme.iconHome).gameObject;
             _end.SetActive(false);
         }
@@ -164,20 +164,20 @@ namespace CadenceClub.UI
         /// <param name="showHome">False in the first session, so the win card only leads on.</param>
         /// <param name="nextLabel">The win card's way on ("Next level", or "Continue" when it leads Home).</param>
         public void ShowEnd(LevelState state, bool hasNext, string rewards, string continueLabel = null, bool showHome = true,
-            string nextLabel = "Next level")
+            string nextLabel = null)
         {
             bool won = state.Outcome == LevelOutcome.Won;
             _next.SetActive(won && hasNext);
             _continue.SetActive(!won && continueLabel != null);
             _retry.SetActive(!(won && hasNext));
             _home.SetActive(showHome || !(won && hasNext)); // never a card with no way out
-            _next.GetComponentInChildren<TextMeshProUGUI>().text = nextLabel;
+            _next.GetComponentInChildren<TextMeshProUGUI>().text = nextLabel ?? Loc.T("Next level");
             if (continueLabel != null)
             {
                 _continue.GetComponentInChildren<TextMeshProUGUI>().text = continueLabel;
             }
 
-            _retry.GetComponentInChildren<TextMeshProUGUI>().text = won ? "Play again" : "Try again";
+            _retry.GetComponentInChildren<TextMeshProUGUI>().text = won ? Loc.T("Play again") : Loc.T("Try again");
             float y = -30f;
             foreach (var button in new[] { _next, _continue, _retry, _home })
             {
@@ -188,10 +188,10 @@ namespace CadenceClub.UI
                 }
             }
 
-            _endTitle.text = won ? $"Level {state.Def.id} complete!" : "Out of moves";
+            _endTitle.text = won ? Loc.F("Level {0} complete!", state.Def.id) : Loc.T("Out of moves");
             _endBody.text = (won
-                ? $"{state.MovesLeft} {(state.MovesLeft == 1 ? "move" : "moves")} to spare"
-                : "So close!") + "\n" + rewards;
+                ? state.MovesLeft == 1 ? Loc.F("{0} move to spare", 1) : Loc.F("{0} moves to spare", state.MovesLeft)
+                : Loc.T("So close!")) + "\n" + rewards;
             _end.SetActive(true);
             JuiceFx.Punch(_endCard, 0.08f, 0.3f);
         }
@@ -205,7 +205,7 @@ namespace CadenceClub.UI
 
         public void ShowNoLives(System.TimeSpan nextLife)
         {
-            _endBody.text = $"No lives left.\nThe next one comes in {nextLife.Minutes}:{nextLife.Seconds:00}.";
+            _endBody.text = Loc.T("No lives left.") + "\n" + Loc.F("The next one comes in {0}:{1:00}.", nextLife.Minutes, nextLife.Seconds);
             JuiceFx.Punch(_endCard, 0.06f, 0.2f);
         }
 

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace CadenceClub.Core
 {
@@ -109,7 +110,16 @@ namespace CadenceClub.Core
         public static readonly string[] Tables =
         {
             "config", "riders", "rate_tables", "banners", "rarities", "rider_levels", "areas", "renovation", "boosters", "daily_login", "shop",
+            "strings",
         };
+
+        /// <summary>The languages the UI is written in; strings.csv has one column for each.</summary>
+        public static readonly string[] Languages = { "en", "vi", "ja" };
+
+        /// <summary>UI text by language, keyed by the English (format strings keep their {0} holes).</summary>
+        public readonly Dictionary<string, Dictionary<string, string>> Translations = new Dictionary<string, Dictionary<string, string>>();
+
+        private readonly List<string> _duplicateStrings = new List<string>();
 
         /// <summary>Pre-level boosters bought with coins: specials placed on the board when the level starts.</summary>
         public readonly List<BoosterDef> Boosters = new List<BoosterDef>();
@@ -140,6 +150,12 @@ namespace CadenceClub.Core
         public int Int(string key) => Config.TryGetValue(key, out var v) && int.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out int n) ? n : 0;
 
         public string Text(string key) => Config.TryGetValue(key, out var v) ? v : "";
+
+        /// <summary><paramref name="english"/> in <paramref name="language"/>; the English itself when there's no translation.</summary>
+        public string Translate(string english, string language) =>
+            english != null && Translations.TryGetValue(language ?? "", out var table) && table.TryGetValue(english, out var text) && text.Length > 0
+                ? text
+                : english;
 
         /// <summary>Parses every table through <paramref name="read"/> (table name → CSV text, null if missing).</summary>
         public static MasterData Parse(Func<string, string> read)
@@ -228,6 +244,25 @@ namespace CadenceClub.Core
             foreach (var row in md.Rows(read, "shop", "id", "label", "gems"))
             {
                 md.Shop.Add(new ShopItemDef { id = row["id"], label = row["label"], gems = md.Number(row, "gems") });
+            }
+
+            foreach (var row in md.Rows(read, "strings", Languages))
+            {
+                foreach (var language in Languages.Skip(1))
+                {
+                    if (!md.Translations.TryGetValue(language, out var table))
+                    {
+                        md.Translations[language] = table = new Dictionary<string, string>();
+                    }
+
+                    if (table.ContainsKey(row["en"]))
+                    {
+                        md._duplicateStrings.Add(row["en"]);
+                        continue;
+                    }
+
+                    table[row["en"]] = row[language];
+                }
             }
 
             return md;
@@ -328,6 +363,21 @@ namespace CadenceClub.Core
                 Check(Int(key) > 0, $"config: {key} must be a positive number");
             }
 
+            foreach (var english in _duplicateStrings.Distinct())
+            {
+                Check(false, $"strings: '{english}' appears twice");
+            }
+
+            foreach (var translation in Translations)
+            {
+                foreach (var entry in translation.Value)
+                {
+                    Check(entry.Value.Length > 0, $"strings: '{entry.Key}' has no {translation.Key}");
+                    Check(entry.Value.Length == 0 || Holes(entry.Value) == Holes(entry.Key),
+                        $"strings: '{entry.Key}' in {translation.Key} must keep the same {{0}} holes");
+                }
+            }
+
             return problems;
         }
 
@@ -368,6 +418,10 @@ namespace CadenceClub.Core
                 yield return row;
             }
         }
+
+        /// <summary>The format holes in a text, sorted ("{0}{1}"), to compare a translation with its English.</summary>
+        private static string Holes(string text) =>
+            string.Concat(Regex.Matches(text, @"\{\d+(:[^}]*)?\}").Cast<Match>().Select(m => m.Value).OrderBy(h => h, StringComparer.Ordinal));
 
         private int Number(Dictionary<string, string> row, string column) => Number(row[column], column);
 

@@ -68,33 +68,33 @@ namespace CadenceClub.UI
             var banner = Banner;
             var featured = md.Rider(banner.featured);
             _card = UiFactory.CreateCard(transform, Vector2.zero, new Vector2(980f, 1620f));
-            UiFactory.CreateText(_card, "Recruit", 88, new Vector2(-80f, 720f), new Vector2(700f, 120f), TextAlignmentOptions.MidlineLeft, UiFont.Display)
+            UiFactory.CreateText(_card, Loc.T("Recruit"), 88, new Vector2(-80f, 720f), new Vector2(700f, 120f), TextAlignmentOptions.MidlineLeft, UiFont.Display)
                 .color = theme.ink;
             UiFactory.CreateIconButton(_card, theme.iconClose, new Vector2(410f, 720f), 96f, () => _stack.PopAsync().Forget(), ButtonStyle.Secondary, "x");
 
             // Banner panel: the featured rider.
             UiFactory.CreateRounded(_card, new Vector2(0f, 330f), new Vector2(900f, 600f), ClubUi.Night, 40);
             UiFactory.CreateRounded(_card, new Vector2(0f, 580f), new Vector2(330f, 64f), theme.accent, 32);
-            UiFactory.CreateText(_card, "Featured SSR", 34, new Vector2(0f, 582f), new Vector2(330f, 64f), TextAlignmentOptions.Center, UiFont.Display)
+            UiFactory.CreateText(_card, Loc.T("Featured SSR"), 34, new Vector2(0f, 582f), new Vector2(330f, 64f), TextAlignmentOptions.Center, UiFont.Display)
                 .color = theme.ink;
-            UiFactory.CreateText(_card, banner.name, 76, new Vector2(0f, 480f), new Vector2(860f, 110f), TextAlignmentOptions.Center, UiFont.Display);
+            UiFactory.CreateText(_card, Loc.T(banner.name), 76, new Vector2(0f, 480f), new Vector2(860f, 110f), TextAlignmentOptions.Center, UiFont.Display);
             ClubUi.Portrait(_card, featured, new Vector2(-230f, 250f), 300f);
             UiFactory.CreateText(_card, featured.name, 64, new Vector2(170f, 340f), new Vector2(460f, 90f), TextAlignmentOptions.MidlineLeft, UiFont.Display);
-            UiFactory.CreateText(_card, featured.role, 38, new Vector2(170f, 270f), new Vector2(460f, 60f), TextAlignmentOptions.MidlineLeft)
+            UiFactory.CreateText(_card, Loc.T(featured.role), 38, new Vector2(170f, 270f), new Vector2(460f, 60f), TextAlignmentOptions.MidlineLeft)
                 .color = new Color(1f, 1f, 1f, 0.7f);
             UiFactory.CreateText(_card, RiderText.Power(featured, 1), 36, new Vector2(170f, 170f), new Vector2(460f, 120f), TextAlignmentOptions.MidlineLeft);
 
             // Pity, gems, rates, pulls: everything about the pull sits together.
-            UiFactory.CreateText(_card, $"SSR guaranteed within {club.PullsToPity(banner)} pulls", 42, new Vector2(0f, -40f), new Vector2(880f, 70f),
+            UiFactory.CreateText(_card, Loc.F("SSR guaranteed within {0} pulls", club.PullsToPity(banner)), 42, new Vector2(0f, -40f), new Vector2(880f, 70f),
                 TextAlignmentOptions.Center, UiFont.Display).color = theme.ink;
             UiFactory.CreateImage(_card, PieceArt.Gem, new Vector2(-175f, -130f), new Vector2(64f, 64f), Color.white);
-            UiFactory.CreateText(_card, $"{club.gems:N0} gems", 46, new Vector2(70f, -128f), new Vector2(360f, 70f), TextAlignmentOptions.MidlineLeft, UiFont.Display)
+            UiFactory.CreateText(_card, Loc.F("{0:N0} gems", club.gems), 46, new Vector2(70f, -128f), new Vector2(360f, 70f), TextAlignmentOptions.MidlineLeft, UiFont.Display)
                 .color = theme.ink;
             Pull(new Vector2(-235f, -290f), 1, club, md);
             Pull(new Vector2(235f, -290f), 10, club, md);
-            UiFactory.CreateButton(_card, "Rates", new Vector2(0f, -470f), new Vector2(300f, 110f), () => _rates.OpenAsync(Banner).Forget(),
+            UiFactory.CreateButton(_card, Loc.T("Rates"), new Vector2(0f, -470f), new Vector2(300f, 110f), () => _rates.OpenAsync(Banner).Forget(),
                 ButtonStyle.Secondary);
-            UiFactory.CreateText(_card, "No real purchases: gems come from playing.\nEvery 10-pull has at least one SR.", 32, new Vector2(0f, -640f),
+            UiFactory.CreateText(_card, Loc.T("No real purchases: gems come from playing.") + "\n" + Loc.T("Every 10-pull has at least one SR."), 32, new Vector2(0f, -640f),
                 new Vector2(860f, 110f)).color = theme.muted;
         }
 
@@ -158,7 +158,7 @@ namespace CadenceClub.UI
             var md = Club.Master;
             var rates = md.RateTables[banner.rateTable];
             _card = UiFactory.CreateCard(transform, Vector2.zero, new Vector2(940f, 1500f));
-            UiFactory.CreateText(_card, "Rates", 80, new Vector2(-80f, 650f), new Vector2(700f, 110f), TextAlignmentOptions.MidlineLeft, UiFont.Display)
+            UiFactory.CreateText(_card, Loc.T("Rates"), 80, new Vector2(-80f, 650f), new Vector2(700f, 110f), TextAlignmentOptions.MidlineLeft, UiFont.Display)
                 .color = theme.ink;
             UiFactory.CreateIconButton(_card, theme.iconClose, new Vector2(390f, 650f), 96f, () => _stack.PopAsync().Forget(), ButtonStyle.Secondary, "x");
 
@@ -169,7 +169,7 @@ namespace CadenceClub.UI
                 UiFactory.CreateText(_card, $"{rarity}  {rates[rarity]}%", 48, new Vector2(0f, y), new Vector2(840f, 70f), TextAlignmentOptions.MidlineLeft,
                     UiFont.Display).color = theme.ink;
                 y -= 60f;
-                var lines = riders.Select(r => $"{r.name}{(r.id == banner.featured ? " (featured)" : "")}  {Chance(md, banner, r):0.##}%");
+                var lines = riders.Select(r => $"{r.name}{(r.id == banner.featured ? " " + Loc.T("(featured)") : "")}  {Chance(md, banner, r):0.##}%");
                 var text = UiFactory.CreateText(_card, string.Join("   ·   ", lines), 32, new Vector2(0f, y - 30f), new Vector2(840f, 120f),
                     TextAlignmentOptions.TopLeft);
                 text.color = theme.muted;
@@ -177,8 +177,9 @@ namespace CadenceClub.UI
             }
 
             UiFactory.CreateText(_card,
-                $"An SSR is guaranteed by pull {banner.pity}: the counter shows how many pulls are left.\n" +
-                $"Half of SSR pulls give the featured rider.\nEvery 10-pull has at least one SR.\nA rider you already have becomes shards that level them up.",
+                Loc.F("An SSR is guaranteed by pull {0}: the counter shows how many pulls are left.", banner.pity) + "\n" +
+                Loc.T("Half of SSR pulls give the featured rider.") + "\n" + Loc.T("Every 10-pull has at least one SR.") + "\n" +
+                Loc.T("A rider you already have becomes shards that level them up."),
                 34, new Vector2(0f, y - 120f), new Vector2(840f, 300f), TextAlignmentOptions.TopLeft).color = theme.ink;
             return _stack.PushAsync(this);
         }
@@ -211,14 +212,19 @@ namespace CadenceClub.UI
     /// </summary>
     public sealed class RevealScreen : UIScreen
     {
-        private static readonly Dictionary<string, string> Lines = new Dictionary<string, string>
+        /// <summary>What an SSR says when revealed, by role.</summary>
+        private static string Line(string role)
         {
-            ["Sprinter"] = "Watch me go!",
-            ["Climber"] = "Hills? Easy.",
-            ["Mechanic"] = "Leave the bikes to me.",
-            ["Rouleur"] = "Steady wins the day.",
-            ["Coach"] = "Breathe, then push.",
-        };
+            switch (role)
+            {
+                case "Sprinter": return Loc.T("Watch me go!");
+                case "Climber": return Loc.T("Hills? Easy.");
+                case "Mechanic": return Loc.T("Leave the bikes to me.");
+                case "Rouleur": return Loc.T("Steady wins the day.");
+                case "Coach": return Loc.T("Breathe, then push.");
+                default: return Loc.T("Let's ride!");
+            }
+        }
 
         private ScreenStack _stack;
         private RectTransform _content;
@@ -286,7 +292,8 @@ namespace CadenceClub.UI
             UiFactory.CreatePanel(_content, new Color(0.03f, 0.05f, 0.09f, 0.97f)).raycastTarget = false; // backdrop: the screen behind stays hidden
             _flash = UiFactory.CreatePanel(_content, new Color(1f, 1f, 1f, 0f));
             _flash.raycastTarget = false;
-            var skip = UiFactory.CreateButton(_content, "Skip", Vector2.zero, new Vector2(220f, 100f), Skip, ButtonStyle.Glass);
+            var skip = UiFactory.CreateButton(_content, Loc.T("Skip"), Vector2.zero, new Vector2(220f, 100f), Skip, ButtonStyle.Glass);
+            skip.name = "Skip"; // found by name for the summary, whatever the label's language
             UiFactory.Place(skip, new Vector2(1f, 1f), new Vector2(-150f, -110f));
 
             bool single = outcomes.Count == 1;
@@ -321,7 +328,7 @@ namespace CadenceClub.UI
             ClubUi.Portrait(front, rider, new Vector2(0f, 40f * k), 120f * k);
             UiFactory.CreateText(front, rider.name, Mathf.RoundToInt(30 * k), new Vector2(0f, -58f * k), new Vector2(size.x, 44f * k),
                 TextAlignmentOptions.Center, UiFont.Display).color = theme.ink;
-            string tag = outcome.grant.isNew ? "NEW" : $"+{outcome.grant.shards} shards";
+            string tag = outcome.grant.isNew ? Loc.T("NEW") : Loc.F("+{0} shards", outcome.grant.shards);
             UiFactory.CreateRounded(front, new Vector2(0f, -100f * k), new Vector2(150f * k, 36f * k), outcome.grant.isNew ? theme.highlight : theme.paperEdge,
                 Mathf.RoundToInt(18 * k));
             UiFactory.CreateText(front, tag, Mathf.RoundToInt(22 * k), new Vector2(0f, -98f * k), new Vector2(150f * k, 36f * k), TextAlignmentOptions.Center,
@@ -373,8 +380,7 @@ namespace CadenceClub.UI
                     Haptics.Medium();
                     Burst(card.root);
                     var rider = Club.Master.Rider(card.outcome.pull.riderId);
-                    string said = Lines.TryGetValue(rider.role, out var l) ? l : "Let's ride!";
-                    var line = UiFactory.CreateText(_content, $"{rider.name}: “{said}”", 56, new Vector2(0f, -560f), new Vector2(980f, 120f),
+                    var line = UiFactory.CreateText(_content, Loc.F("{0}: “{1}”", rider.name, Line(rider.role)), 56, new Vector2(0f, -560f), new Vector2(980f, 120f),
                         TextAlignmentOptions.Center, UiFont.Story);
                     await Wait(1.3f);
                     if (line != null)
@@ -434,7 +440,7 @@ namespace CadenceClub.UI
             for (int i = _content.childCount - 1; i >= 0; i--)
             {
                 var child = _content.GetChild(i);
-                if (child.name.StartsWith("Button Skip") || child.GetComponent<TextMeshProUGUI>() != null || child.name == "Wheel" ||
+                if (child.name == "Skip" || child.GetComponent<TextMeshProUGUI>() != null || child.name == "Wheel" ||
                     child.name == "Burst")
                 {
                     Destroy(child.gameObject); // the skip button, a voice line, the wheels, burst dots
@@ -443,10 +449,10 @@ namespace CadenceClub.UI
 
             var theme = UiTheme.Current;
             int fresh = _cards.Count(c => c.outcome.grant.isNew);
-            var title = UiFactory.CreateText(_content, fresh > 0 ? $"{fresh} new {(fresh == 1 ? "rider" : "riders")}!" : "Shards for your riders", 80,
+            var title = UiFactory.CreateText(_content, fresh > 1 ? Loc.F("{0} new riders!", fresh) : fresh == 1 ? Loc.T("1 new rider!") : Loc.T("Shards for your riders"), 80,
                 Vector2.zero, new Vector2(1000f, 120f), TextAlignmentOptions.Center, UiFont.Display);
             UiFactory.Place(title, new Vector2(0.5f, 0.5f), new Vector2(0f, 420f));
-            var done = UiFactory.CreateButton(_content, "Done", Vector2.zero, new Vector2(600f, 150f), Close, ButtonStyle.Primary, theme.iconCheck);
+            var done = UiFactory.CreateButton(_content, Loc.T("Done"), Vector2.zero, new Vector2(600f, 150f), Close, ButtonStyle.Primary, theme.iconCheck);
             UiFactory.Place(done, new Vector2(0.5f, 0.5f), new Vector2(0f, -430f));
         }
 

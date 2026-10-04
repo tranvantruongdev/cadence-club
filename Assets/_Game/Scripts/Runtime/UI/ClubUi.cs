@@ -76,14 +76,26 @@ namespace CadenceClub.UI
             int n = rider.Power(level);
             switch (rider.power)
             {
-                case PowerKind.RowRockets: return n == 1 ? "Fires a rocket along the fullest row" : $"Fires {n} rockets along the fullest rows";
-                case PowerKind.ColumnRockets: return n == 1 ? "Fires a rocket down the fullest column" : $"Fires {n} rockets down the fullest columns";
-                case PowerKind.BreakObstacles: return $"Breaks {n} crates, ice or chains";
-                case PowerKind.MakeSpecials: return $"Turns {n} pieces into rockets and bombs";
-                default: return n == 1 ? "+1 move" : $"+{n} moves";
+                case PowerKind.RowRockets: return n == 1 ? Loc.T("Fires a rocket along the fullest row") : Loc.F("Fires {0} rockets along the fullest rows", n);
+                case PowerKind.ColumnRockets: return n == 1 ? Loc.T("Fires a rocket down the fullest column") : Loc.F("Fires {0} rockets down the fullest columns", n);
+                case PowerKind.BreakObstacles: return Loc.F("Breaks {0} crates, ice or chains", n);
+                case PowerKind.MakeSpecials: return Loc.F("Turns {0} pieces into rockets and bombs", n);
+                default: return n == 1 ? Loc.T("+1 move") : Loc.F("+{0} moves", n);
             }
         }
 
-        public static string Charge(RiderDef rider) => $"Charges with {rider.charge} {PieceArt.ShapeNames[Mathf.Clamp(rider.color, 0, PieceArt.ShapeNames.Length - 1)]}s";
+        /// <summary>What fills the rider's charge: pieces of their colour (one sentence per shape, so each translates whole).</summary>
+        public static string Charge(RiderDef rider)
+        {
+            switch (rider.color)
+            {
+                case 0: return Loc.F("Charges with {0} wheels", rider.charge);
+                case 1: return Loc.F("Charges with {0} jerseys", rider.charge);
+                case 2: return Loc.F("Charges with {0} gems", rider.charge);
+                case 3: return Loc.F("Charges with {0} bells", rider.charge);
+                case 4: return Loc.F("Charges with {0} nuts", rider.charge);
+                default: return Loc.F("Charges with {0} drops", rider.charge);
+            }
+        }
     }
 }

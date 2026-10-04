@@ -4,6 +4,7 @@ using Template.Core.Save;
 using Template.Game.Boot;
 using Template.Game.Flow;
 using Template.Infra;
+using Template.UI;
 using UnityEngine;
 
 namespace CadenceClub
@@ -29,6 +30,11 @@ namespace CadenceClub
                 {
                     _data = save.GetGame<ClubSave>(); // a reloaded or reset save gets read again
                     _loadedFrom = save;
+                    if (!_data.started)
+                    {
+                        save.settings.language = Loc.FromSystem(); // a first launch speaks the device's language
+                    }
+
                     _data.StartIfNew(Master);
                 }
 
@@ -49,8 +55,12 @@ namespace CadenceClub
 
         /// <summary>First-session script: a new player boots straight into the next level, skipping Home.</summary>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
-        private static void OpenNewPlayersInALevel() =>
+        private static void OpenNewPlayersInALevel()
+        {
             GameBootstrap.FirstState = () => Data.InFirstSession(Master) ? AppState.Game : AppState.Title;
+            UiFactory.Localize = Loc.T; // the template's own labels (Settings) in the player's language
+            SettingsPanelView.Languages = new[] { ("en", "English"), ("vi", "Tiếng Việt"), ("ja", "日本語") };
+        }
 
         public static void Save()
         {

@@ -13,6 +13,7 @@ namespace Template.Core.Tests
             public event Action<float> SfxChanged;
             public event Action<bool> HapticsChanged;
             public event Action<bool> ReduceMotionChanged;
+            public event Action<string> LanguageChanged;
 
             public SettingsData Shown;
             public int ShowCalls;
@@ -27,7 +28,10 @@ namespace Template.Core.Tests
             public void Sfx(float v) => SfxChanged?.Invoke(v);
             public void Haptics(bool v) => HapticsChanged?.Invoke(v);
             public void Reduce(bool v) => ReduceMotionChanged?.Invoke(v);
-            public bool HasListeners => MusicChanged != null || SfxChanged != null || HapticsChanged != null || ReduceMotionChanged != null;
+            public void Language(string code) => LanguageChanged?.Invoke(code);
+
+            public bool HasListeners =>
+                MusicChanged != null || SfxChanged != null || HapticsChanged != null || ReduceMotionChanged != null || LanguageChanged != null;
         }
 
         [Test]
@@ -61,6 +65,21 @@ namespace Template.Core.Tests
             Assert.IsFalse(settings.haptics);
             Assert.IsTrue(settings.reduceMotion);
             Assert.AreEqual(4, changes);
+        }
+
+        [Test]
+        public void Picking_a_language_stores_it_reports_it_and_shows_it()
+        {
+            var settings = new SettingsData();
+            var view = new FakeView();
+            var presenter = new SettingsPresenter(settings);
+            string reported = null;
+            presenter.SettingsChanged += s => reported = s.language;
+            presenter.Attach(view);
+
+            view.Language("ja");
+
+            Assert.AreEqual(("ja", "ja", 2), (settings.language, reported, view.ShowCalls));
         }
 
         [Test]

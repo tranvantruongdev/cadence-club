@@ -68,7 +68,7 @@ namespace CadenceClub.PlayModeTests
                 Capture("first-level1-finger");
                 yield return PlayToEnd(controller, "first-level1");
                 Assert.AreEqual(LevelOutcome.Won, State(controller).Outcome, "the bot wins level 1's designed board");
-                AssertWinCardOnlyLeadsOn(controller, "Next level");
+                AssertWinCardOnlyLeadsOn(controller, Loc.T("Next level"));
 
                 // Level 3, as if level 2 were won: its designed board opens on a bomb, and winning it leads Home.
                 Club.Data.level = 3;
@@ -77,7 +77,7 @@ namespace CadenceClub.PlayModeTests
                 Capture("first-level3-hint");
                 yield return PlayToEnd(controller, "first-level3");
                 Assert.AreEqual(LevelOutcome.Won, State(controller).Outcome, "the bot wins level 3's designed board");
-                AssertWinCardOnlyLeadsOn(controller, "Continue");
+                AssertWinCardOnlyLeadsOn(controller, Loc.T("Continue"));
                 typeof(LevelController).GetMethod("NextLevel", Private).Invoke(controller, null);
                 yield return WaitForScene("Title", 20f);
                 yield return new WaitForSeconds(0.6f);
@@ -270,6 +270,63 @@ namespace CadenceClub.PlayModeTests
 
                 yield return Services.Get<GameFlow>().GoToAsync(AppState.Title).ToCoroutine(); // the whole transition: GameFlow ignores requests mid-fade
                 yield return WaitForScene("Title", 20f);
+                yield return new WaitForSeconds(0.6f);
+
+                // Settings → 日本語: closing the panel rebuilds Home in Japanese; then the same for Tiếng Việt.
+                foreach (var (code, name) in new[] { ("ja", "日本語"), ("vi", "Tiếng Việt") })
+                {
+                    var before = Object.FindAnyObjectByType<HomeController>();
+                    typeof(HomeController).GetMethod("OpenSettings", Private).Invoke(before, null);
+                    yield return new WaitForSeconds(0.6f);
+                    var settingsView = (Template.UI.SettingsPanelView)typeof(HomeController).GetField("_settingsView", Private).GetValue(before);
+                    settingsView.GetComponentsInChildren<UnityEngine.UI.Button>().First(b => b.name == "Button " + name).onClick.Invoke();
+                    Assert.AreEqual(code, Loc.Language);
+                    typeof(HomeController).GetMethod("CloseSettings", Private).Invoke(before, null);
+                    float waited = 0f;
+                    while (Object.FindAnyObjectByType<HomeController>() == before || Object.FindAnyObjectByType<HomeController>() == null)
+                    {
+                        waited += Time.unscaledDeltaTime;
+                        Assert.Less(waited, 10f, "Home rebuilds after the language changes");
+                        yield return null;
+                    }
+
+                    yield return new WaitForSeconds(0.8f);
+                    StringAssert.Contains(Loc.F("Play level {0}", Levels.Next(Club.Data.level)), ScreenText(), $"Home speaks {code}");
+                    Capture($"{code}-home");
+                    var rebuilt = Object.FindAnyObjectByType<HomeController>();
+                    if (code == "ja")
+                    {
+                        typeof(HomeController).GetMethod("OpenSettings", Private).Invoke(rebuilt, null);
+                        yield return new WaitForSeconds(0.6f);
+                        Capture("ja-settings");
+                        typeof(HomeController).GetMethod("CloseSettings", Private).Invoke(rebuilt, null);
+                        yield return new WaitForSeconds(0.6f);
+                        var jaStart = (CadenceClub.UI.LevelStartScreen)typeof(HomeController).GetField("_levelStart", Private).GetValue(rebuilt);
+                        jaStart.OpenAsync(Levels.Load(20)).Forget();
+                        yield return new WaitForSeconds(0.6f);
+                        Capture("ja-level-start");
+                        var jaStack = (Template.UI.ScreenStack)typeof(HomeController).GetField("_stack", Private).GetValue(rebuilt);
+                        yield return jaStack.PopAsync().ToCoroutine();
+
+                        // The longest Japanese lines: Recruit's notes, the shop banner, a rider's power and charge.
+                        ((CadenceClub.UI.RecruitScreen)typeof(HomeController).GetField("_recruit", Private).GetValue(rebuilt)).OpenAsync().Forget();
+                        yield return new WaitForSeconds(0.6f);
+                        Capture("ja-recruit");
+                        yield return jaStack.PopAsync().ToCoroutine();
+                        ((CadenceClub.UI.ShopScreen)typeof(HomeController).GetField("_shop", Private).GetValue(rebuilt)).OpenAsync().Forget();
+                        yield return new WaitForSeconds(0.6f);
+                        Capture("ja-shop");
+                        yield return jaStack.PopAsync().ToCoroutine();
+                        var jaRiders = (CadenceClub.UI.RidersScreen)typeof(HomeController).GetField("_riders", Private).GetValue(rebuilt);
+                        jaRiders.OpenAsync().Forget();
+                        yield return new WaitForSeconds(0.6f);
+                        jaRiders.OpenDetailAsync("ba_tu").Forget();
+                        yield return new WaitForSeconds(0.6f);
+                        Capture("ja-rider-detail");
+                        yield return jaStack.PopAsync().ToCoroutine();
+                        yield return jaStack.PopAsync().ToCoroutine();
+                    }
+                }
             }
             finally
             {
@@ -286,6 +343,12 @@ namespace CadenceClub.PlayModeTests
                 }
             }
         }
+
+        /// <summary>Every TextMeshPro label in the scene, joined (the tests don't reference TMP, so through reflection).</summary>
+        private static string ScreenText() =>
+            string.Join("|", Object.FindObjectsByType<Component>(FindObjectsSortMode.None)
+                .Where(c => c.GetType().Name == "TextMeshProUGUI")
+                .Select(c => (string)c.GetType().GetProperty("text").GetValue(c)));
 
         /// <summary>First-session win card: one button on (labelled <paramref name="next"/>), no Home.</summary>
         private static void AssertWinCardOnlyLeadsOn(LevelController controller, string next)
@@ -361,7 +424,7 @@ namespace CadenceClub.PlayModeTests
             var hud = typeof(LevelController).GetField("_hud", Private).GetValue(controller);
             var bodyLabel = hud.GetType().GetField("_endBody", Private).GetValue(hud);
             string body = (string)bodyLabel.GetType().GetProperty("text").GetValue(bodyLabel);
-            StringAssert.Contains("coins", body, $"{name}: the end card shows the payout, or the coins to keep going");
+            StringAssert.IsMatch(@"\d", body, $"{name}: the end card shows the payout, or the coins to keep going");
             yield return new WaitForSecondsRealtime(0.5f);
             Capture($"{name}-{(state.Outcome == LevelOutcome.Won ? "won" : "lost")}");
         }

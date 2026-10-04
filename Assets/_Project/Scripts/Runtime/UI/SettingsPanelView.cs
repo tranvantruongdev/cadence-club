@@ -17,11 +17,16 @@ namespace Template.UI
         private Slider _sfx;
         private Toggle _haptics;
         private Toggle _reduceMotion;
+        private RectTransform _languages;
+
+        /// <summary>The languages a game offers, as (code, name in that language). Fewer than two hides the row.</summary>
+        public static (string code, string name)[] Languages = Array.Empty<(string, string)>();
 
         public event Action<float> MusicChanged;
         public event Action<float> SfxChanged;
         public event Action<bool> HapticsChanged;
         public event Action<bool> ReduceMotionChanged;
+        public event Action<string> LanguageChanged;
         public event Action CloseRequested;
 
         public override bool IsModal => true;
@@ -46,12 +51,21 @@ namespace Template.UI
             view._haptics = UiFactory.CreateToggle(card, "Vibration", new Vector2(0, -20), v => view.HapticsChanged?.Invoke(v), theme.iconVibration);
             view._reduceMotion = UiFactory.CreateToggle(card, "Reduce motion", new Vector2(0, -150),
                 v => view.ReduceMotionChanged?.Invoke(v), theme.iconMotion);
-            UiFactory.CreateButton(card, "Done", new Vector2(0, -360), new Vector2(760, 140), () => view.CloseRequested?.Invoke(),
+            bool languages = Languages.Length > 1;
+            if (languages)
+            {
+                view._languages = UiFactory.CreateRect("Languages", card);
+                view._languages.anchorMin = view._languages.anchorMax = new Vector2(0.5f, 0.5f);
+                view._languages.anchoredPosition = new Vector2(0, -270);
+                view._languages.sizeDelta = new Vector2(760, 100);
+            }
+
+            UiFactory.CreateButton(card, "Done", new Vector2(0, languages ? -430 : -360), new Vector2(760, 140), () => view.CloseRequested?.Invoke(),
                 ButtonStyle.Primary, theme.iconCheck);
 
             if (!string.IsNullOrEmpty(theme.credits))
             {
-                var credits = UiFactory.CreateText(card, theme.credits, 30, new Vector2(0, -530), new Vector2(800, 110));
+                var credits = UiFactory.CreateText(card, theme.credits, 30, new Vector2(0, languages ? -572 : -530), new Vector2(800, languages ? 86 : 110));
                 credits.color = theme.muted;
             }
 
@@ -65,6 +79,24 @@ namespace Template.UI
             _sfx.SetValueWithoutNotify(settings.sfxVolume);
             _haptics.SetIsOnWithoutNotify(settings.haptics);
             _reduceMotion.SetIsOnWithoutNotify(settings.reduceMotion);
+            if (_languages == null)
+            {
+                return;
+            }
+
+            // One button per language; the current one stands out.
+            foreach (Transform child in _languages)
+            {
+                Destroy(child.gameObject);
+            }
+
+            float width = _languages.sizeDelta.x / Languages.Length;
+            for (int i = 0; i < Languages.Length; i++)
+            {
+                string code = Languages[i].code;
+                UiFactory.CreateButton(_languages, Languages[i].name, new Vector2((i - (Languages.Length - 1) * 0.5f) * width, 0), new Vector2(width - 20, 96),
+                    () => LanguageChanged?.Invoke(code), code == settings.language ? ButtonStyle.Primary : ButtonStyle.Secondary);
+            }
         }
 
         public override bool HandleBack()

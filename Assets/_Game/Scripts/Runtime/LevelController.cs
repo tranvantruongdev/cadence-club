@@ -135,7 +135,7 @@ namespace CadenceClub
 
             if (!Club.Data.TryBuyContinue(md))
             {
-                _hud.ShowEndMessage($"Not enough coins: {md.Int("extra_moves_cost")} needed, you have {Club.Data.coins}.");
+                _hud.ShowEndMessage(Loc.F("Not enough coins: {0} needed, you have {1}.", md.Int("extra_moves_cost"), Club.Data.coins));
                 return;
             }
 
@@ -169,11 +169,11 @@ namespace CadenceClub
             if (_state.Outcome == LevelOutcome.Won)
             {
                 var reward = club.Win(md, _def.id, _state.MovesLeft);
-                line = $"+{reward.coins} coins" + (reward.stars > 0 ? "  ·  +1 star" : "");
+                line = Loc.F("+{0} coins", reward.coins) + (reward.stars > 0 ? "  ·  " + Loc.T("+1 star") : "");
                 var gift = club.TryGiveFreeRider(md);
                 if (gift.HasValue)
                 {
-                    line += $"\n{md.Rider(gift.Value.riderId).name} joined the club!";
+                    line += "\n" + Loc.F("{0} joined the club!", md.Rider(gift.Value.riderId).name);
                     Club.PendingReveals.Add(new PullOutcome
                     {
                         pull = new PullResult { riderId = gift.Value.riderId, rarity = md.Rider(gift.Value.riderId).rarity },
@@ -185,7 +185,7 @@ namespace CadenceClub
             {
                 // ponytail: quitting the app on this card keeps the life; charge it at loss time if that matters.
                 _lifeOwed = true;
-                line = $"Keep going for {md.Int("extra_moves_cost")} coins, or leaving costs a life.";
+                line = Loc.F("Keep going for {0} coins, or leaving costs a life.", md.Int("extra_moves_cost"));
             }
 
             Club.Save();
@@ -365,8 +365,8 @@ namespace CadenceClub
                 // The first session's last win leads Home, where the first renovation task waits; before it, only on.
                 _nextGoesHome = _firstSession && !Club.Data.InFirstSession(md);
                 _hud.ShowEnd(_state, hasNext: _def.id < Levels.Count, rewards,
-                    $"+{md.Int("extra_moves")} moves  ·  {md.Int("extra_moves_cost")}", showHome: !_firstSession,
-                    nextLabel: _nextGoesHome ? "Continue" : "Next level");
+                    Loc.F("+{0} moves", md.Int("extra_moves")) + $"  ·  {md.Int("extra_moves_cost")}", showHome: !_firstSession,
+                    nextLabel: _nextGoesHome ? Loc.T("Continue") : Loc.T("Next level"));
             }
 
             _idle = 0f;

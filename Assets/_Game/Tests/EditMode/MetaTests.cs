@@ -21,6 +21,7 @@ namespace CadenceClub.Core.Tests
                 ["boosters"] = "id,name,special,count,cost\nrockets,Rockets,RocketH,2,150\nbomb,Bomb,Bomb,1,200\ndisco,Disco,Disco,1,350",
                 ["daily_login"] = "day,gems\n1,20\n2,25\n3,30\n4,35\n5,40\n6,45\n7,50",
                 ["shop"] = "id,label,gems\nhandful,Handful,100",
+                ["strings"] = "en,vi,ja\nShop,Cửa hàng,ショップ\n\"Play level {0}\",Chơi màn {0},レベル{0}をプレイ",
                 ["riders"] = "id,name,role,rarity,color,power,charge,power_by_level\n" +
                              "r1,Rider One,Sprinter,R,0,RowRockets,22,1;1;2;2;2\nr2,Rider Two,Climber,R,1,ColumnRockets,22,1;1;2;2;2\n" +
                              "s1,Super One,Mechanic,SR,2,BreakObstacles,18,5;5;6;6;7\ns2,Super Two,Rouleur,SR,3,MakeSpecials,18,5;5;6;6;7\n" +
@@ -274,6 +275,35 @@ namespace CadenceClub.Core.Tests
             save.coins = 300;
             Assert.IsTrue(save.TryBuyContinue(md));
             Assert.AreEqual(0, save.coins);
+        }
+
+        [Test]
+        public void Text_translates_by_its_english_and_falls_back_to_it()
+        {
+            var md = Md();
+            Assert.AreEqual(("Shop", "Cửa hàng", "ショップ"), (md.Translate("Shop", "en"), md.Translate("Shop", "vi"), md.Translate("Shop", "ja")));
+            Assert.AreEqual("レベル{0}をプレイ", md.Translate("Play level {0}", "ja"));
+            Assert.AreEqual("Not in the table", md.Translate("Not in the table", "ja"), "unknown text stays English");
+            Assert.AreEqual("Shop", md.Translate("Shop", "fr"), "unknown language stays English");
+        }
+
+        [Test]
+        public void Strings_must_be_translated_keep_their_holes_and_appear_once()
+        {
+            var tables = new Dictionary<string, string>();
+            foreach (var table in MasterData.Tables)
+            {
+                tables[table] = "x\n";
+            }
+
+            tables["strings"] = "en,vi,ja\nShop,,ショップ\n\"Play level {0}\",Chơi màn,レベル{0}\nShop,Cửa hàng,ショップ";
+            var problems = MasterData.Parse(t => tables[t]).Validate().Where(p => p.StartsWith("strings")).ToList();
+            CollectionAssert.AreEquivalent(new[]
+            {
+                "strings: 'Shop' appears twice",
+                "strings: 'Shop' has no vi",
+                "strings: 'Play level {0}' in vi must keep the same {0} holes",
+            }, problems);
         }
 
         [Test]

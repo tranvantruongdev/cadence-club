@@ -59,10 +59,10 @@ namespace CadenceClub.UI
             var club = Club.Data;
             var riders = md.Riders.OrderByDescending(r => r.rarity).ThenBy(r => r.name).ToList();
             _card = UiFactory.CreateCard(transform, Vector2.zero, new Vector2(1000f, 1700f));
-            UiFactory.CreateText(_card, "Riders", 88, new Vector2(-90f, 760f), new Vector2(700f, 120f), TextAlignmentOptions.MidlineLeft, UiFont.Display)
+            UiFactory.CreateText(_card, Loc.T("Riders"), 88, new Vector2(-90f, 760f), new Vector2(700f, 120f), TextAlignmentOptions.MidlineLeft, UiFont.Display)
                 .color = theme.ink;
             UiFactory.CreateIconButton(_card, theme.iconClose, new Vector2(420f, 760f), 96f, () => _stack.PopAsync().Forget(), ButtonStyle.Secondary, "x");
-            UiFactory.CreateText(_card, $"{club.riders.Count(o => md.Rider(o.id) != null)} of {riders.Count} recruited", 40, new Vector2(-90f, 680f),
+            UiFactory.CreateText(_card, Loc.F("{0} of {1} recruited", club.riders.Count(o => md.Rider(o.id) != null), riders.Count), 40, new Vector2(-90f, 680f),
                 new Vector2(700f, 60f), TextAlignmentOptions.MidlineLeft).color = theme.muted;
 
             for (int i = 0; i < riders.Count; i++)
@@ -77,7 +77,9 @@ namespace CadenceClub.UI
                     TextAlignmentOptions.Center, UiFont.Display).color = owned != null ? theme.ink : theme.muted;
                 if (owned != null)
                 {
-                    string level = owned.level >= ClubSave.MaxRiderLevel ? "Lv 5 · max" : $"Lv {owned.level} · {owned.shards}/{club.LevelUpCost(md, id)}";
+                    string level = owned.level >= ClubSave.MaxRiderLevel
+                        ? Loc.F("Lv {0} · max", owned.level)
+                        : Loc.F("Lv {0}", owned.level) + $" · {owned.shards}/{club.LevelUpCost(md, id)}";
                     var label = UiFactory.CreateText(tile.transform, level, 28, new Vector2(0f, -130f), new Vector2(280f, 44f));
                     label.color = club.CanLevelUp(md, id) ? theme.highlight : theme.muted;
                 }
@@ -144,7 +146,7 @@ namespace CadenceClub.UI
             ClubUi.Portrait(_card, rider, new Vector2(0f, 420f), 300f);
             UiFactory.CreateText(_card, rider.name, 88, new Vector2(0f, 200f), new Vector2(800f, 120f), TextAlignmentOptions.Center, UiFont.Display)
                 .color = theme.ink;
-            UiFactory.CreateText(_card, $"{rider.role} · {rider.rarity}", 42, new Vector2(0f, 120f), new Vector2(800f, 60f)).color = theme.muted;
+            UiFactory.CreateText(_card, $"{Loc.T(rider.role)} · {rider.rarity}", 42, new Vector2(0f, 120f), new Vector2(800f, 60f)).color = theme.muted;
 
             UiFactory.CreateRounded(_card, new Vector2(0f, -20f), new Vector2(800f, 170f), theme.paperEdge, 30);
             var power = UiFactory.CreateText(_card, RiderText.Power(rider, owned.level), 44, new Vector2(0f, 18f), new Vector2(760f, 90f),
@@ -156,7 +158,7 @@ namespace CadenceClub.UI
             power.textWrappingMode = TextWrappingModes.NoWrap;
             UiFactory.CreateText(_card, RiderText.Charge(rider), 34, new Vector2(0f, -60f), new Vector2(760f, 50f)).color = theme.muted;
 
-            UiFactory.CreateText(_card, $"Level {owned.level} of {ClubSave.MaxRiderLevel}", 50, new Vector2(0f, -190f), new Vector2(800f, 70f),
+            UiFactory.CreateText(_card, Loc.F("Level {0} of {1}", owned.level, ClubSave.MaxRiderLevel), 50, new Vector2(0f, -190f), new Vector2(800f, 70f),
                 TextAlignmentOptions.Center, UiFont.Display).color = theme.ink;
             int cost = club.LevelUpCost(md, _riderId);
             if (owned.level < ClubSave.MaxRiderLevel)
@@ -168,14 +170,14 @@ namespace CadenceClub.UI
                     UiFactory.CreateRounded(_card, new Vector2(-350f + 350f * fill, -270f), new Vector2(700f * fill, 34f), theme.accent, 17);
                 }
 
-                UiFactory.CreateText(_card, $"{owned.shards} / {cost} shards", 36, new Vector2(0f, -325f), new Vector2(700f, 50f)).color = theme.muted;
+                UiFactory.CreateText(_card, Loc.F("{0} / {1} shards", owned.shards, cost), 36, new Vector2(0f, -325f), new Vector2(700f, 50f)).color = theme.muted;
                 bool ready = club.CanLevelUp(md, _riderId);
-                UiFactory.CreateButton(_card, ready ? $"Level up to {owned.level + 1}" : "More shards from Recruit", new Vector2(0f, -500f),
+                UiFactory.CreateButton(_card, ready ? Loc.F("Level up to {0}", owned.level + 1) : Loc.T("More shards from Recruit"), new Vector2(0f, -500f),
                     new Vector2(720f, 150f), LevelUp, ready ? ButtonStyle.Primary : ButtonStyle.Secondary, ready ? theme.iconStar : null);
             }
             else
             {
-                UiFactory.CreateText(_card, "Fully trained", 44, new Vector2(0f, -300f), new Vector2(700f, 60f), TextAlignmentOptions.Center, UiFont.Display)
+                UiFactory.CreateText(_card, Loc.T("Fully trained"), 44, new Vector2(0f, -300f), new Vector2(700f, 60f), TextAlignmentOptions.Center, UiFont.Display)
                     .color = theme.highlight;
             }
         }

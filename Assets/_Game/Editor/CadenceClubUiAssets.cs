@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using Template.EditorTools.Setup;
 using Template.UI;
@@ -62,6 +64,15 @@ namespace CadenceClub.EditorTools
                 return false;
             }
 
+            var japanese = JapaneseFont(characters);
+            if (japanese == null)
+            {
+                return false;
+            }
+
+            AddFallback(display, japanese);
+            AddFallback(body, japanese);
+
             var shadow = Preset(display, "Baloo2-ExtraBold SDF Shadow", force, m =>
             {
                 m.EnableKeyword("UNDERLAY_ON");
@@ -121,6 +132,34 @@ namespace CadenceClub.EditorTools
             }
 
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// M PLUS Rounded 1c as Baloo 2's fallback (Baloo has no Japanese): a static atlas of every character in
+        /// strings.csv that the Latin set lacks, plus the language names on the Settings screen. Rebuilt when strings.csv
+        /// needs a glyph the atlas doesn't have, so new Japanese text only needs this tool run again.
+        /// </summary>
+        private static TMP_FontAsset JapaneseFont(string latin)
+        {
+            const string file = "MPLUSRounded1c-Bold";
+            const string languageNames = "日本語"; // Settings shows each language in its own script
+            string text = File.ReadAllText("Assets/_Game/Resources/MasterData/strings.csv") + languageNames;
+            var needed = new string(text.Where(c => !char.IsControl(c) && latin.IndexOf(c) < 0).Distinct().OrderBy(c => c).ToArray());
+            var existing = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>($"{FontsFolder}/{file} SDF.asset");
+            bool upToDate = existing != null && existing.HasCharacters(needed, out List<char> _);
+            return FontAsset(file, 56, 6, 2048, 2048, needed, !upToDate);
+        }
+
+        private static void AddFallback(TMP_FontAsset font, TMP_FontAsset fallback)
+        {
+            font.fallbackFontAssetTable ??= new List<TMP_FontAsset>();
+            font.fallbackFontAssetTable.RemoveAll(f => f == null); // a rebuilt fallback leaves a missing reference behind
+            if (!font.fallbackFontAssetTable.Contains(fallback))
+            {
+                font.fallbackFontAssetTable.Add(fallback);
+            }
+
+            EditorUtility.SetDirty(font);
         }
 
         private static TMP_FontAsset FontAsset(string file, int samplingSize, int padding, int width, int height, string characters, bool force)
@@ -263,7 +302,7 @@ namespace CadenceClub.EditorTools
             theme.iconTrophy = Icon("trophy");
             theme.iconStar = Icon("star");
             theme.iconCheck = Icon("checkmark");
-            theme.credits = "Font: Baloo 2 (SIL Open Font License). Icons: Kenney (CC0).";
+            theme.credits = "Fonts: Baloo 2, M PLUS Rounded 1c (SIL Open Font License). Icons: Kenney (CC0).";
 
             if (created)
             {

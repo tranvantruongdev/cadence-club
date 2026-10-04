@@ -52,9 +52,9 @@ namespace CadenceClub.UI
             bool canClaim = club.CanClaimDaily(Club.Today);
             int done = canClaim ? club.DailyIndex : club.DailyIndex == 0 ? 7 : club.DailyIndex; // days ticked this week
             _card = UiFactory.CreateCard(transform, Vector2.zero, new Vector2(940f, 1160f));
-            UiFactory.CreateText(_card, "Daily gift", 84, new Vector2(0f, 480f), new Vector2(800f, 120f), TextAlignmentOptions.Center, UiFont.Display)
+            UiFactory.CreateText(_card, Loc.T("Daily gift"), 84, new Vector2(0f, 480f), new Vector2(800f, 120f), TextAlignmentOptions.Center, UiFont.Display)
                 .color = theme.ink;
-            UiFactory.CreateText(_card, "A gift for every day you visit. Day 7 is the biggest.", 36, new Vector2(0f, 395f), new Vector2(820f, 60f))
+            UiFactory.CreateText(_card, Loc.T("A gift for every day you visit. Day 7 is the biggest."), 36, new Vector2(0f, 395f), new Vector2(820f, 60f))
                 .color = theme.muted;
             for (int i = 0; i < md.DailyGems.Count; i++)
             {
@@ -66,7 +66,7 @@ namespace CadenceClub.UI
                 tile.anchoredPosition = position;
                 tile.sizeDelta = new Vector2(190f, 220f);
                 UiFactory.CreateRounded(tile, Vector2.zero, tile.sizeDelta, today ? theme.accent : claimed ? Color.Lerp(theme.accent, Color.white, 0.6f) : theme.paperEdge, 28);
-                UiFactory.CreateText(tile, $"Day {i + 1}", 32, new Vector2(0f, 75f), new Vector2(180f, 46f), TextAlignmentOptions.Center, UiFont.Display)
+                UiFactory.CreateText(tile, Loc.F("Day {0}", i + 1), 32, new Vector2(0f, 75f), new Vector2(180f, 46f), TextAlignmentOptions.Center, UiFont.Display)
                     .color = theme.ink;
                 UiFactory.CreateImage(tile, PieceArt.Gem, new Vector2(0f, 5f), new Vector2(i == 6 ? 92f : 72f, i == 6 ? 92f : 72f), Color.white);
                 UiFactory.CreateText(tile, md.DailyGems[i].ToString(), 38, new Vector2(0f, -70f), new Vector2(180f, 50f), TextAlignmentOptions.Center, UiFont.Display)
@@ -79,13 +79,13 @@ namespace CadenceClub.UI
 
             if (canClaim)
             {
-                UiFactory.CreateButton(_card, $"Claim {md.DailyGems[club.DailyIndex]} gems", new Vector2(0f, -330f), new Vector2(680f, 150f), Claim,
+                UiFactory.CreateButton(_card, Loc.F("Claim {0} gems", md.DailyGems[club.DailyIndex]), new Vector2(0f, -330f), new Vector2(680f, 150f), Claim,
                     ButtonStyle.Primary, PieceArt.Gem).FullColourIcon();
             }
             else
             {
-                UiFactory.CreateText(_card, "Come back tomorrow for the next gift.", 40, new Vector2(0f, -300f), new Vector2(800f, 60f)).color = theme.muted;
-                UiFactory.CreateButton(_card, "Close", new Vector2(0f, -420f), new Vector2(500f, 120f), () => _stack.PopAsync().Forget(), ButtonStyle.Secondary);
+                UiFactory.CreateText(_card, Loc.T("Come back tomorrow for the next gift."), 40, new Vector2(0f, -300f), new Vector2(800f, 60f)).color = theme.muted;
+                UiFactory.CreateButton(_card, Loc.T("Close"), new Vector2(0f, -420f), new Vector2(500f, 120f), () => _stack.PopAsync().Forget(), ButtonStyle.Secondary);
             }
         }
 
@@ -146,11 +146,11 @@ namespace CadenceClub.UI
             var theme = UiTheme.Current;
             var md = Club.Master;
             _card = UiFactory.CreateCard(transform, Vector2.zero, new Vector2(940f, 1260f));
-            UiFactory.CreateText(_card, "Shop", 88, new Vector2(-90f, 545f), new Vector2(700f, 120f), TextAlignmentOptions.MidlineLeft, UiFont.Display)
+            UiFactory.CreateText(_card, Loc.T("Shop"), 88, new Vector2(-90f, 545f), new Vector2(700f, 120f), TextAlignmentOptions.MidlineLeft, UiFont.Display)
                 .color = theme.ink;
             UiFactory.CreateIconButton(_card, theme.iconClose, new Vector2(390f, 545f), 96f, () => _stack.PopAsync().Forget(), ButtonStyle.Secondary, "x");
             UiFactory.CreateRounded(_card, new Vector2(0f, 420f), new Vector2(820f, 110f), theme.highlight, 30);
-            UiFactory.CreateText(_card, "Demo shop: no real purchases.\nPacks are free in this build.", 34, new Vector2(0f, 422f), new Vector2(780f, 110f),
+            UiFactory.CreateText(_card, Loc.T("Demo shop: no real purchases.") + "\n" + Loc.T("Packs are free in this build."), 34, new Vector2(0f, 422f), new Vector2(780f, 110f),
                 TextAlignmentOptions.Center, UiFont.Display);
             for (int i = 0; i < md.Shop.Count; i++)
             {
@@ -161,14 +161,14 @@ namespace CadenceClub.UI
                 row.sizeDelta = new Vector2(820f, 200f);
                 UiFactory.CreateRounded(row, Vector2.zero, row.sizeDelta, theme.paperEdge, 30);
                 UiFactory.CreateImage(row, PieceArt.Gem, new Vector2(-320f, 0f), Vector2.one * (90f + i * 20f), Color.white);
-                UiFactory.CreateText(row, $"{item.gems:N0} gems", 52, new Vector2(-60f, 25f), new Vector2(360f, 70f), TextAlignmentOptions.MidlineLeft, UiFont.Display)
+                UiFactory.CreateText(row, Loc.F("{0:N0} gems", item.gems), 52, new Vector2(-60f, 25f), new Vector2(360f, 70f), TextAlignmentOptions.MidlineLeft, UiFont.Display)
                     .color = theme.ink;
-                UiFactory.CreateText(row, item.label, 32, new Vector2(-60f, -35f), new Vector2(360f, 50f), TextAlignmentOptions.MidlineLeft).color = theme.muted;
+                UiFactory.CreateText(row, Loc.T(item.label), 32, new Vector2(-60f, -35f), new Vector2(360f, 50f), TextAlignmentOptions.MidlineLeft).color = theme.muted;
                 string id = item.id;
-                UiFactory.CreateButton(row, "Free", new Vector2(285f, 0f), new Vector2(200f, 120f), () => Claim(id), ButtonStyle.Primary);
+                UiFactory.CreateButton(row, Loc.T("Free"), new Vector2(285f, 0f), new Vector2(200f, 120f), () => Claim(id), ButtonStyle.Primary);
             }
 
-            UiFactory.CreateText(_card, $"You have {Club.Data.gems:N0} gems", 40, new Vector2(0f, -500f), new Vector2(800f, 60f), TextAlignmentOptions.Center,
+            UiFactory.CreateText(_card, Loc.F("You have {0:N0} gems", Club.Data.gems), 40, new Vector2(0f, -500f), new Vector2(800f, 60f), TextAlignmentOptions.Center,
                 UiFont.Display).color = theme.ink;
         }
 

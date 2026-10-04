@@ -11,6 +11,9 @@ namespace Template.Core.Settings
         event Action<bool> HapticsChanged;
         event Action<bool> ReduceMotionChanged;
 
+        /// <summary>A language code the game offers (see <see cref="SettingsData.language"/>).</summary>
+        event Action<string> LanguageChanged;
+
         void Show(SettingsData settings);
     }
 
@@ -33,6 +36,7 @@ namespace Template.Core.Settings
             View.SfxChanged += OnSfxChanged;
             View.HapticsChanged += OnHapticsChanged;
             View.ReduceMotionChanged += OnReduceMotionChanged;
+            View.LanguageChanged += OnLanguageChanged;
             View.Show(_settings);
         }
 
@@ -42,6 +46,7 @@ namespace Template.Core.Settings
             View.SfxChanged -= OnSfxChanged;
             View.HapticsChanged -= OnHapticsChanged;
             View.ReduceMotionChanged -= OnReduceMotionChanged;
+            View.LanguageChanged -= OnLanguageChanged;
         }
 
         private void OnMusicChanged(float value)
@@ -66,6 +71,13 @@ namespace Template.Core.Settings
         {
             _settings.reduceMotion = value;
             Commit();
+        }
+
+        private void OnLanguageChanged(string code)
+        {
+            _settings.language = code;
+            Commit();
+            View.Show(_settings); // the chosen language is marked
         }
 
         private void Commit()
