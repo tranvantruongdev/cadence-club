@@ -34,6 +34,8 @@ namespace CadenceClub.Art
         private static Sprite _chain;
         private static Sprite _disc;
         private static Sprite _ring;
+        private static Sprite _heart;
+        private static Sprite _coin;
 
         public static Sprite Piece(int color)
         {
@@ -90,6 +92,18 @@ namespace CadenceClub.Art
 
         /// <summary>A white ring, for charge meters drawn as a radial fill.</summary>
         public static Sprite Ring => _ring != null ? _ring : (_ring = DrawMask("Ring", (x, y) => Mathf.Abs(Mathf.Sqrt(x * x + y * y) - 0.88f) - 0.09f, Color.white));
+
+        /// <summary>Lives: a red heart (two circles over a turned square).</summary>
+        public static Sprite Heart => _heart != null ? _heart : (_heart = Draw("Heart", (x, y) => Mathf.Min(
+            Mathf.Min(Mathf.Sqrt((x - 0.3f) * (x - 0.3f) + (y - 0.22f) * (y - 0.22f)) - 0.34f,
+                Mathf.Sqrt((x + 0.3f) * (x + 0.3f) + (y - 0.22f) * (y - 0.22f)) - 0.34f),
+            (Mathf.Abs(x) + Mathf.Abs(y + 0.12f)) * 0.7071f - 0.47f), Hex(0xE5484D)));
+
+        /// <summary>Coins: a gold disc (shaded and glossed like the pieces).</summary>
+        public static Sprite Coin => _coin != null ? _coin : (_coin = Draw("Coin", (x, y) => Mathf.Sqrt(x * x + y * y) - 0.8f, Hex(0xF5B90F)));
+
+        /// <summary>Gems: the blue gem piece.</summary>
+        public static Sprite Gem => Piece(2);
 
         public static Sprite GoalIcon(Goal goal) =>
             goal.kind == GoalKind.Crates ? Crate(2) : goal.kind == GoalKind.Ice ? Ice : Piece(goal.color);

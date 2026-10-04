@@ -1,5 +1,6 @@
 using System.Collections;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using CadenceClub.Core;
 using CadenceClub.View;
@@ -51,6 +52,27 @@ namespace CadenceClub.PlayModeTests
                 yield return WaitForScene("Title", 20f);
                 yield return new WaitForSeconds(0.6f);
                 Capture("0-title");
+
+                // Home: build a renovation task with a star, then open the level start popup.
+                var home = Object.FindAnyObjectByType<HomeController>();
+                Assert.IsNotNull(home, "Home opens after boot");
+                var homeClub = Club.Data;
+                var homeMd = Club.Master;
+                var task = homeMd.Tasks.FirstOrDefault(t => !homeClub.IsBuilt(t.id) && t.area == homeClub.CurrentArea(homeMd).id);
+                if (task != null)
+                {
+                    homeClub.stars += task.stars;
+                    int built = homeClub.built.Count;
+                    typeof(HomeController).GetMethod("Build", Private).Invoke(home, new object[] { task });
+                    Assert.AreEqual(built + 1, homeClub.built.Count, "a ★ builds the task");
+                    yield return new WaitForSeconds(0.6f);
+                    Capture("0a-home-built");
+                }
+
+                var levelStart = (CadenceClub.UI.LevelStartScreen)typeof(HomeController).GetField("_levelStart", Private).GetValue(home);
+                levelStart.OpenAsync(Levels.Load(Levels.Next(homeClub.level))).Forget();
+                yield return new WaitForSeconds(0.6f);
+                Capture("0c-level-start");
 
                 Levels.Override = 1; // a save from an earlier run could be further along
                 yield return EnterGame();

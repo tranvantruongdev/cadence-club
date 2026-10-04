@@ -80,7 +80,7 @@ namespace Template.EditorTools.Setup
         {
             Directory.CreateDirectory(ScenesFolder);
             string boot = CreateScene("Boot", typeof(GameBootstrap));
-            string title = CreateScene("Title", typeof(ClubTitleController));
+            string title = CreateScene("Title", typeof(HomeController));
             string game = CreateScene("Game", typeof(LevelController));
 
             EditorBuildSettings.scenes = new[]
