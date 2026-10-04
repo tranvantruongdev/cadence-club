@@ -4,6 +4,7 @@
     "references": [
         "Template.Core",
         "Template.Runtime",
+        "CadenceClub.Runtime",
         "Unity.InputSystem",
         "Unity.TextMeshPro",
         "Unity.TextMeshPro.Editor"

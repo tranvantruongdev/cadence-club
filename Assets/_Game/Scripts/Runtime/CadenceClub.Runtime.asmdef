@@ -1,0 +1,23 @@
+{
+    "name": "CadenceClub.Runtime",
+    "rootNamespace": "CadenceClub",
+    "references": [
+        "CadenceClub.Core",
+        "Template.Core",
+        "Template.Runtime",
+        "UniTask",
+        "PrimeTween.Runtime",
+        "Unity.InputSystem",
+        "UnityEngine.UI",
+        "Unity.TextMeshPro"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using CadenceClub;
 using Template.Game.Boot;
 using Template.Game.Sample;
 using UnityEditor;
@@ -47,14 +48,11 @@ namespace Template.EditorTools.Setup
         public static void ApplyPlayerSettings()
         {
             PlayerSettings.companyName = "Tran Van Truong";
-            if (string.IsNullOrEmpty(PlayerSettings.productName) || PlayerSettings.productName == "unity-mobile-template")
-            {
-                PlayerSettings.productName = "Unity Mobile Template";
-            }
+            PlayerSettings.productName = "Cadence Club";
 
-            // Change per game, e.g. com.tranvantruong.cadenceclub. Must be unique on Google Play.
-            PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.Android, "com.tranvantruong.template");
-            PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.Standalone, "com.tranvantruong.template");
+            // Must be unique on Google Play.
+            PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.Android, "com.tranvantruong.cadenceclub");
+            PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.Standalone, "com.tranvantruong.cadenceclub");
 
             // Portrait phone game.
             PlayerSettings.defaultInterfaceOrientation = UIOrientation.Portrait;
@@ -84,7 +82,7 @@ namespace Template.EditorTools.Setup
             Directory.CreateDirectory(ScenesFolder);
             string boot = CreateScene("Boot", typeof(GameBootstrap));
             string title = CreateScene("Title", typeof(TitleController));
-            string game = CreateScene("Game", typeof(SampleGameController));
+            string game = CreateScene("Game", typeof(LevelController));
 
             EditorBuildSettings.scenes = new[]
             {

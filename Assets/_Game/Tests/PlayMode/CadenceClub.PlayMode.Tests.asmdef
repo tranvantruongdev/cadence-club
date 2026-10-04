@@ -1,0 +1,26 @@
+{
+    "name": "CadenceClub.PlayMode.Tests",
+    "rootNamespace": "CadenceClub.PlayModeTests",
+    "references": [
+        "CadenceClub.Core",
+        "CadenceClub.Runtime",
+        "Template.Core",
+        "Template.Runtime",
+        "UniTask",
+        "UnityEngine.TestRunner",
+        "UnityEngine.UI"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
