@@ -73,6 +73,87 @@ namespace CadenceClub.Core
         public static Goal BreakCrates(int count) => new Goal { kind = GoalKind.Crates, color = Piece.NoColor, count = count };
 
         public static Goal ClearIce(int count) => new Goal { kind = GoalKind.Ice, color = Piece.NoColor, count = count };
+
+        /// <summary>Shallow copy: the shape and goals arrays are shared (nothing mutates them).</summary>
+        public LevelDef Clone() => (LevelDef)MemberwiseClone();
+
+        /// <summary>What would make the level broken or unwinnable; empty when it's fine. The editor and tests use it.</summary>
+        public List<string> Validate()
+        {
+            var problems = new List<string>();
+            if (shape == null || shape.Length == 0 || string.IsNullOrEmpty(shape[0]))
+            {
+                problems.Add("the level has no shape");
+                return problems;
+            }
+
+            int cells = 0;
+            int ice = 0;
+            int crates = 0;
+            for (int row = 0; row < shape.Length; row++)
+            {
+                if (shape[row].Length != Width)
+                {
+                    problems.Add($"row {row + 1} is {shape[row].Length} wide; row 1 is {Width}");
+                }
+
+                foreach (char c in shape[row])
+                {
+                    if ("#.12il".IndexOf(c) < 0)
+                    {
+                        problems.Add($"row {row + 1} has '{c}' (use # . 1 2 i l)");
+                    }
+
+                    cells += c == '.' || c == 'i' || c == 'l' ? 1 : 0;
+                    ice += c == 'i' ? 1 : 0;
+                    crates += c == '1' || c == '2' ? 1 : 0;
+                }
+            }
+
+            if (colors < 3 || colors > 6)
+            {
+                problems.Add($"colours must be 3–6, not {colors}");
+            }
+
+            if (moves < 1)
+            {
+                problems.Add("moves must be at least 1");
+            }
+
+            if (cells < 9)
+            {
+                problems.Add($"only {cells} cells hold pieces; a board needs at least 9");
+            }
+
+            if (goals == null || goals.Length == 0)
+            {
+                problems.Add("the level has no goals");
+                return problems;
+            }
+
+            for (int g = 0; g < goals.Length; g++)
+            {
+                var goal = goals[g];
+                if (goal.count < 1)
+                {
+                    problems.Add($"goal {g + 1} asks for {goal.count}");
+                }
+                else if (goal.kind == GoalKind.Collect && (goal.color < 0 || goal.color >= colors))
+                {
+                    problems.Add($"goal {g + 1} collects colour {goal.color}, but the level has colours 0–{colors - 1}");
+                }
+                else if (goal.kind == GoalKind.Ice && goal.count > ice)
+                {
+                    problems.Add($"goal {g + 1} wants {goal.count} ice; the board has {ice}");
+                }
+                else if (goal.kind == GoalKind.Crates && goal.count > crates)
+                {
+                    problems.Add($"goal {g + 1} wants {goal.count} crates; the board has {crates}");
+                }
+            }
+
+            return problems;
+        }
     }
 
     public enum LevelOutcome

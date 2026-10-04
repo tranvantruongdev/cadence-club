@@ -53,10 +53,13 @@ namespace CadenceClub.PlayModeTests
                 }
             }
 
-            Canvas.ForceUpdateCanvases();
             var texture = RenderTexture.GetTemporary(width, height, 24);
             var previous = camera.targetTexture;
             camera.targetTexture = texture;
+            // Warm-up render: scripts that fit the camera to its aspect right before rendering (LevelController)
+            // settle first; then the camera-space canvases lay out for the settled camera, and the real shot follows.
+            camera.Render();
+            Canvas.ForceUpdateCanvases();
             camera.Render();
             RenderTexture.active = texture;
             var image = new Texture2D(width, height, TextureFormat.RGB24, false);

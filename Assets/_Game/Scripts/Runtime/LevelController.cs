@@ -5,6 +5,7 @@ using CadenceClub.UI;
 using CadenceClub.View;
 using Cysharp.Threading.Tasks;
 using Template.Core.Random;
+using Template.Core.Save;
 using Template.Game.Flow;
 using Template.Infra;
 using Template.Infra.Audio;
@@ -12,44 +13,10 @@ using Template.Infra.Device;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
+using UnityEngine.Rendering;
 
 namespace CadenceClub
 {
-    /// <summary>Hand-made levels until the level files and editor arrive.</summary>
-    public static class Levels
-    {
-        /// <summary>
-        /// LevelSimulator, 200 runs each: greedy bot wins 100% (12 moves left), random bot 95% (7.5 left).
-        /// Four colours cascaded so much that even 45+45 was a 91% random-bot win.
-        /// </summary>
-        public static LevelDef First() => new LevelDef
-        {
-            id = 1,
-            shape = new[] { ".......", ".......", ".......", ".......", ".......", ".......", ".......", "......." },
-            colors = 5,
-            moves = 20,
-            goals = new[] { LevelDef.Collect(0, 15), LevelDef.Collect(2, 15) },
-            seed = 1,
-        };
-
-        /// <summary>
-        /// Two 2-hit crates, three chained pieces, two rows of ice. LevelSimulator, 200 runs each: greedy bot wins 89%
-        /// (12 moves left), random bot 20%.
-        /// </summary>
-        public static LevelDef Obstacles() => new LevelDef
-        {
-            id = 2,
-            shape = new[] { ".......", ".......", "..2.2..", "l.....l", ".......", "...l...", "iiiiiii", "iiiiiii" },
-            colors = 5,
-            moves = 26,
-            goals = new[] { LevelDef.ClearIce(14), LevelDef.BreakCrates(2) },
-            seed = 1,
-        };
-
-        /// <summary>The level the Game scene plays. Level select will set it; tests set it directly.</summary>
-        public static LevelDef Current { get; set; } = First();
-    }
-
     /// <summary>
     /// The Game scene: owns one <see cref="LevelState"/>, turns swipes into moves, lets the <see cref="BoardView"/>
     /// replay each resolved move, and shows the end card. Input is locked while a move plays.
@@ -65,6 +32,7 @@ namespace CadenceClub
         private LevelHud _hud;
         private Camera _camera;
         private AudioService _audio;
+        private SaveService _save;
         private AudioClip _pop;
         private Bot _hintBot;
         private float _idle;
@@ -88,16 +56,37 @@ namespace CadenceClub
             _camera.backgroundColor = new Color(0.07f, 0.11f, 0.18f);
             _camera.clearFlags = CameraClearFlags.SolidColor;
 
-            _def = Levels.Current;
+            _save = Services.Get<SaveService>();
             _hintBot = new Bot(BotKind.Greedy, new SeededRandom(1)); // hints the move a careful player would make
-            _hud = LevelHud.Create(_def);
-            _hud.RetryPressed += Restart;
-            _hud.HomePressed += GoHome;
             AppLifecycle.BackPressed += GoHome;
-            Restart();
+            Play(Levels.Override ?? Levels.Next(_save.Data.level));
         }
 
         private void OnDestroy() => AppLifecycle.BackPressed -= GoHome;
+
+        /// <summary>Loads a level and builds its HUD and board from scratch (shapes differ between levels).</summary>
+        private void Play(int number)
+        {
+            _def = Levels.Load(number);
+            if (_hud != null)
+            {
+                Destroy(_hud.gameObject);
+            }
+
+            if (_board != null)
+            {
+                Destroy(_board.gameObject);
+                _board = null;
+            }
+
+            _hud = LevelHud.Create(_def);
+            _hud.RetryPressed += Restart;
+            _hud.NextPressed += NextLevel;
+            _hud.HomePressed += GoHome;
+            Restart();
+        }
+
+        private void NextLevel() => Play(Math.Min(_def.id + 1, Levels.Count));
 
         private void Restart()
         {
@@ -105,7 +94,7 @@ namespace CadenceClub
             if (_board == null)
             {
                 _board = BoardView.Create(_state.Board);
-                FitCamera();
+                _camera.transform.position = new Vector3(0f, 0.6f, -10f); // zoom follows the aspect in FitBeforeRender
             }
             else
             {
@@ -118,13 +107,25 @@ namespace CadenceClub
             _busy = false;
         }
 
-        private void FitCamera()
+        private void OnEnable() => RenderPipelineManager.beginCameraRendering += FitBeforeRender;
+
+        private void OnDisable() => RenderPipelineManager.beginCameraRendering -= FitBeforeRender;
+
+        /// <summary>
+        /// Zooms so the whole board fits, right before every render: a resized window, a rotated tablet or an offscreen
+        /// capture at another shape all get the right zoom (position stays put, so screen shakes still work).
+        /// </summary>
+        private void FitBeforeRender(ScriptableRenderContext context, Camera camera)
         {
+            if (camera != _camera || _board == null)
+            {
+                return;
+            }
+
             var size = _board.Bounds.size;
-            float aspect = Mathf.Max(0.1f, _camera.aspect);
+            float aspect = Mathf.Max(0.1f, camera.aspect);
             // Leave room above the board for the goals bar and below it for breathing space.
-            _camera.orthographicSize = Mathf.Max(size.y * 0.5f + 2.4f, (size.x * 0.5f + 0.5f) / aspect);
-            _camera.transform.position = new Vector3(0f, 0.6f, -10f);
+            camera.orthographicSize = Mathf.Max(size.y * 0.5f + 2.4f, (size.x * 0.5f + 0.5f) / aspect);
         }
 
         private void Update()
@@ -202,9 +203,14 @@ namespace CadenceClub
                 if (_state.Outcome == LevelOutcome.Won)
                 {
                     Haptics.Medium();
+                    if (_def.id >= _save.Data.level)
+                    {
+                        _save.Data.level = _def.id + 1;
+                        _save.Save();
+                    }
                 }
 
-                _hud.ShowEnd(_state);
+                _hud.ShowEnd(_state, hasNext: _def.id < Levels.Count);
             }
 
             _idle = 0f;

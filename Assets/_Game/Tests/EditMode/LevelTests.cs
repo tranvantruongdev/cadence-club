@@ -88,5 +88,63 @@ namespace CadenceClub.Core.Tests
             Assert.Greater(greedy.averageGoalCompletion, random.averageGoalCompletion, "focused play gets further");
             Assert.GreaterOrEqual(greedy.wins, random.wins);
         }
+
+        [Test]
+        public void Moves_to_win_gives_the_win_rate_of_every_move_limit_in_one_pass()
+        {
+            var def = LevelDef.Rectangle(7, 8, 5, 20, LevelDef.Collect(0, 25), LevelDef.Collect(2, 25));
+            var needed = LevelSimulator.MovesToWin(def, 40, BotKind.Greedy, 1, 60);
+            foreach (int moves in new[] { 8, 12, 16, 20 })
+            {
+                var limited = def.Clone();
+                limited.moves = moves;
+                var run = LevelSimulator.Run(limited, 40, BotKind.Greedy, 1);
+                Assert.AreEqual(run.wins, needed.Count(n => n <= moves), $"{moves} moves: same wins as a separate simulation");
+            }
+
+            int fit = LevelSimulator.FitMoves(needed, (0.65, 0.80));
+            double rate = LevelSimulator.WinRate(needed, fit);
+            Assert.That(rate, Is.InRange(0.65, 0.80), "the fitted limit lands in the band");
+            for (int moves = 1; moves <= 60; moves++)
+            {
+                double other = LevelSimulator.WinRate(needed, moves);
+                if (other >= 0.65 && other <= 0.80)
+                {
+                    Assert.LessOrEqual(System.Math.Abs(rate - 0.725), System.Math.Abs(other - 0.725) + 1e-9, "and is the closest to its middle");
+                }
+            }
+        }
+
+        [Test]
+        public void Validate_explains_what_is_wrong_with_a_level()
+        {
+            Assert.IsEmpty(LevelDef.Rectangle(7, 8, 5, 20, LevelDef.Collect(0, 10)).Validate());
+
+            var broken = new LevelDef
+            {
+                shape = new[] { "..i..", "..x", "1...." },
+                colors = 7,
+                moves = 0,
+                goals = new[] { LevelDef.Collect(5, 10), LevelDef.ClearIce(3), LevelDef.BreakCrates(1) },
+            };
+            var problems = broken.Validate();
+            TestContext.WriteLine(string.Join("\n", problems));
+            Assert.That(problems, Has.Some.Contains("row 2 is 3 wide"));
+            Assert.That(problems, Has.Some.Contains("'x'"));
+            Assert.That(problems, Has.Some.Contains("colours must be 3–6"));
+            Assert.That(problems, Has.Some.Contains("moves must be at least 1"));
+            Assert.That(problems, Has.Some.Contains("wants 3 ice; the board has 1"));
+            Assert.IsFalse(problems.Any(p => p.Contains("crates")), "one crate on the board covers a 1-crate goal");
+        }
+
+        [Test]
+        public void Target_bands_follow_the_sawtooth()
+        {
+            Assert.AreEqual((0.90, 1.0), LevelBands.For(3), "first levels are easy");
+            Assert.AreEqual((0.65, 0.80), LevelBands.For(7), "normal");
+            Assert.AreEqual((0.40, 0.55), LevelBands.For(10), "bump every 5th level");
+            Assert.AreEqual((0.90, 1.0), LevelBands.For(11), "breather after a bump");
+            Assert.AreEqual((0.35, 0.45), LevelBands.For(30), "finale");
+        }
     }
 }

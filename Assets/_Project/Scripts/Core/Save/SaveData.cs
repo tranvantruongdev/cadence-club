@@ -13,6 +13,9 @@ namespace Template.Core.Save
         public SettingsData settings = new SettingsData();
         public int bestScore;
         public int totalRuns;
+
+        /// <summary>Cadence Club: the next level to play (1-based); past the last level once every level is won.</summary>
+        public int level = 1;
     }
 
     [Serializable]

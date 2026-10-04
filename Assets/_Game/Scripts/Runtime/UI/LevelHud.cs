@@ -22,9 +22,12 @@ namespace CadenceClub.UI
         private RectTransform _endCard;
         private TextMeshProUGUI _endTitle;
         private TextMeshProUGUI _endBody;
+        private GameObject _next;
+        private GameObject _retry;
         private int _shownMoves = -1;
 
         public event Action RetryPressed;
+        public event Action NextPressed;
         public event Action HomePressed;
 
         public static LevelHud Create(LevelDef def)
@@ -47,7 +50,7 @@ namespace CadenceClub.UI
             UiFactory.AddShadow(bar, Vector2.zero, bar.sizeDelta, 40, 0.3f, 10f);
             UiFactory.CreateRounded(bar, Vector2.zero, bar.sizeDelta, theme.paper, 40);
 
-            UiFactory.CreateText(bar, "GOALS", 34, new Vector2(-200f, 78f), new Vector2(500f, 50f)).color = theme.muted;
+            UiFactory.CreateText(bar, $"LEVEL {def.id}", 34, new Vector2(-200f, 78f), new Vector2(500f, 50f)).color = theme.muted;
             _goalCounts = new TextMeshProUGUI[def.goals.Length];
             _goalChecks = new Image[def.goals.Length];
             _goalIcons = new RectTransform[def.goals.Length];
@@ -84,10 +87,16 @@ namespace CadenceClub.UI
             _endCard = UiFactory.CreateCard(overlay.rectTransform, Vector2.zero, new Vector2(860f, 760f));
             _endTitle = UiFactory.CreateText(_endCard, "", 88, new Vector2(0f, 250f), new Vector2(780f, 130f), TextAlignmentOptions.Center, UiFont.Display);
             _endTitle.color = theme.ink;
-            _endBody = UiFactory.CreateText(_endCard, "", 48, new Vector2(0f, 90f), new Vector2(760f, 150f));
+            _endTitle.enableAutoSizing = true; // "Level 30 complete!" is wider than "Out of moves"
+            _endTitle.fontSizeMin = 56f;
+            _endTitle.fontSizeMax = 88f;
+            _endBody =UiFactory.CreateText(_endCard, "", 48, new Vector2(0f, 90f), new Vector2(760f, 150f));
             _endBody.color = theme.muted;
-            UiFactory.CreateButton(_endCard, "Play again", new Vector2(0f, -120f), new Vector2(680f, 150f), () => RetryPressed?.Invoke(),
-                ButtonStyle.Primary, theme.iconRetry);
+            // Same spot: a won level offers the next one, otherwise another try.
+            _next = UiFactory.CreateButton(_endCard, "Next level", new Vector2(0f, -120f), new Vector2(680f, 150f), () => NextPressed?.Invoke(),
+                ButtonStyle.Primary, theme.iconPlay).gameObject;
+            _retry = UiFactory.CreateButton(_endCard, "Play again", new Vector2(0f, -120f), new Vector2(680f, 150f), () => RetryPressed?.Invoke(),
+                ButtonStyle.Primary, theme.iconRetry).gameObject;
             UiFactory.CreateButton(_endCard, "Home", new Vector2(0f, -280f), new Vector2(680f, 120f), () => HomePressed?.Invoke(),
                 ButtonStyle.Secondary, theme.iconHome);
             _end.SetActive(false);
@@ -124,10 +133,12 @@ namespace CadenceClub.UI
             }
         }
 
-        public void ShowEnd(LevelState state)
+        public void ShowEnd(LevelState state, bool hasNext)
         {
             bool won = state.Outcome == LevelOutcome.Won;
-            _endTitle.text = won ? "Level complete!" : "Out of moves";
+            _next.SetActive(won && hasNext);
+            _retry.SetActive(!(won && hasNext));
+            _endTitle.text = won ? $"Level {state.Def.id} complete!" : "Out of moves";
             _endBody.text = won
                 ? $"{state.MovesLeft} {(state.MovesLeft == 1 ? "move" : "moves")} to spare"
                 : "So close! Try that board again.";

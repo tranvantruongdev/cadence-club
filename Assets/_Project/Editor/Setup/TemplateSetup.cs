@@ -2,7 +2,6 @@ using System;
 using System.IO;
 using CadenceClub;
 using Template.Game.Boot;
-using Template.Game.Sample;
 using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.SceneManagement;
@@ -81,7 +80,7 @@ namespace Template.EditorTools.Setup
         {
             Directory.CreateDirectory(ScenesFolder);
             string boot = CreateScene("Boot", typeof(GameBootstrap));
-            string title = CreateScene("Title", typeof(TitleController));
+            string title = CreateScene("Title", typeof(ClubTitleController));
             string game = CreateScene("Game", typeof(LevelController));
 
             EditorBuildSettings.scenes = new[]

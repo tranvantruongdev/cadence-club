@@ -11,6 +11,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../Assets/_Game/Tests/EditMode/**/*.cs" />
+    <Compile Include="*.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../GameCore/CadenceClub.Core.csproj" />

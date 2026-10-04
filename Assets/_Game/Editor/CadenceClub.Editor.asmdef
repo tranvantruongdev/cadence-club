@@ -2,6 +2,8 @@
     "name": "CadenceClub.Editor",
     "rootNamespace": "CadenceClub.EditorTools",
     "references": [
+        "CadenceClub.Core",
+        "CadenceClub.Runtime",
         "Template.Runtime",
         "Template.Editor",
         "Unity.TextMeshPro",

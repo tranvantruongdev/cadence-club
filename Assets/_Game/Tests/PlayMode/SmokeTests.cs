@@ -6,6 +6,7 @@ using CadenceClub.View;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using Template.Core.Random;
+using Template.Core.Save;
 using Template.Game.Flow;
 using Template.Infra;
 using UnityEngine;
@@ -45,6 +46,7 @@ namespace CadenceClub.PlayModeTests
                 yield return new WaitForSeconds(0.6f);
                 Capture("0-title");
 
+                Levels.Override = 1; // a save from an earlier run could be further along
                 yield return EnterGame();
                 var controller = Object.FindAnyObjectByType<LevelController>();
                 Capture("level1-start");
@@ -57,12 +59,25 @@ namespace CadenceClub.PlayModeTests
 
                 yield return PlayToEnd(controller, "level1");
                 Assert.AreEqual(0, drifts, "level 1: the board view should match the Core board after every move");
+                if (State(controller).Outcome == LevelOutcome.Won)
+                {
+                    Assert.GreaterOrEqual(Services.Get<SaveService>().Data.level, 2, "winning level 1 unlocks level 2");
+
+                    // "Next level" rebuilds the board for level 2's shape.
+                    typeof(LevelController).GetMethod("NextLevel", Private).Invoke(controller, null);
+                    yield return new WaitForSeconds(0.5f);
+                    Assert.AreEqual(2, State(controller).Def.id);
+                    Assert.AreEqual(LevelOutcome.Playing, State(controller).Outcome);
+                    Capture("level2-start");
+                }
 
                 yield return Services.Get<GameFlow>().GoToAsync(AppState.Title).ToCoroutine(); // the whole transition: GameFlow ignores requests mid-fade
                 yield return WaitForScene("Title", 20f);
+                yield return new WaitForSeconds(0.4f);
+                Capture("0b-title-after-win");
 
-                // Crates, ice and chains.
-                Levels.Current = Levels.Obstacles();
+                // Level 20, a bump: a ring of crates around ice, chains in the corners.
+                Levels.Override = 20;
                 yield return EnterGame();
                 controller = Object.FindAnyObjectByType<LevelController>();
                 Capture("obstacles-start");
@@ -74,10 +89,13 @@ namespace CadenceClub.PlayModeTests
             }
             finally
             {
-                Levels.Current = Levels.First();
+                Levels.Override = null;
                 Application.logMessageReceived -= OnLog;
             }
         }
+
+        private static LevelState State(LevelController controller) =>
+            (LevelState)typeof(LevelController).GetField("_state", Private).GetValue(controller);
 
         private static IEnumerator EnterGame()
         {
