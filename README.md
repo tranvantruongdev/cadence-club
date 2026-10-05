@@ -1,117 +1,97 @@
-# Unity Mobile Template
+# Cadence Club
 
-A starter for small, polished **Unity 6** mobile games: portrait 2D, with Android APK/AAB and Windows
-builds. Every portfolio game starts here (*Tailwind*, *Cadence Club*, *Night Courier*, …).
+*A Royal Match-style match-3 where your cycling club fights to survive.* The old Cadence Club workshop is about to
+become a car park. Win levels for stars, spend them restoring the club room by room, and recruit riders whose
+powers are your boosters: a sprinter fires rockets along a row, a mechanic breaks crates and ice.
 
-> **Verified on Unity 6.3 LTS (6000.3.25f1, URP 2D):** compiles cleanly, project setup runs in batch mode,
-> and all 36 EditMode tests pass in Unity (`Tools/run-unity-tests.ps1`). The core tests also run in CI
-> with `dotnet test`.
+> **Status (Oct 2026):** feature-complete for v1.0.0: 30 levels, 12 riders, gacha, renovation, daily gift,
+> demo shop, English / Vietnamese / Japanese. 134 EditMode tests and a PlayMode smoke test pass in Unity 6.3 LTS;
+> the smoke test plays the real game from a fresh save, and the screenshots below come from it. There is no
+> public build yet: tagging `v1.0.0` builds the Android APK and Windows zip into
+> [Releases](https://github.com/tranvantruongdev/cadence-club/releases).
 
-## What's inside
+<p>
+  <img src="docs/cadence-club.gif" width="270" alt="A disco swapped with a rocket clears the board, the level is won and its moves left go off as rockets, then two rider powers fire on an obstacle level">
+  <img src="docs/screenshots/level-start.png" width="270" alt="Level start: goals, the squad of two riders, and three boosters to buy with coins">
+  <img src="docs/screenshots/reveal-summary.png" width="270" alt="Recruit summary after a 10-pull: new riders and shards for duplicates">
+</p>
 
-| Area | What you get |
+*The GIF and screenshots are recorded by PlayMode tests (`TrailerCapture`, `SmokeTests`). The 33-second
+[trailer](docs/cadence-club-trailer.mp4) comes from the same capture (`Tools/make-trailer.ps1`).*
+
+| | |
 |---|---|
-| **Core (pure C#)** | State machine, deterministic PCG32 random numbers, CSV master data with line-numbered errors, versioned saves with migrations and backup fallback, MVP presenter base, clock abstraction. **No UnityEngine**, so it's unit-tested with `dotnet test` in seconds. |
-| **Runtime** | Boot flow (Boot → Title → Game) with fades, service registry, crash-safe file saves, music crossfade and SFX pool, Android haptics, safe area, screen stack with back-button handling, game-feel helpers (punch, shake, hit-stop, flash, floating text), debug overlay (FPS, memory, reset save) |
-| **UI** | TextMeshPro and one `UiTheme` asset at `Resources/UiTheme` (fonts, colours, radii, motion timings, icons). Rounded 9-sliced shapes drawn in code, buttons that react when the finger goes down (scale, tick, haptic), themed slider and switch rows, animated screens. Without a theme it falls back to neutral colours and TMP's default font. [Tailwind](https://github.com/tranvantruongdev/tailwind) shows a full theme. |
-| **Sample** | Title screen + a 10-second tap game + results, using the shared settings popup (MVP). It uses every system above. Delete it when you start a real game. |
-| **Editor** | `Template > Apply Project Setup` (player settings, scenes, build list in code), `Template > Build > …`, `Template > Import Master Data` (CSV → ScriptableObject) |
-| **CI** | Core tests on every push (dotnet, no licence); Unity EditMode tests via GameCI; **tag `v*` → APK + AAB + Windows zip → GitHub Release + itch.io** |
+| **Inspired by** | Royal Match (swap-to-match, specials, a home to restore between levels) |
+| **Twist** | Riders as boosters: matching a rider's colour charges their power; tap the full portrait to fire it |
+| **My role** | Solo: design, code, levels, tuning. Art is drawn in code; icons are Kenney's |
+| **Engine** | Unity 6.3 LTS (URP 2D), C#. Built from [unity-mobile-template](https://github.com/tranvantruongdev/unity-mobile-template) |
 
-**Packages:** UniTask, PrimeTween (via npm, which its licence allows for templates), Input System,
-Localization, Newtonsoft JSON, Test Framework. See `Tools/setup/template-packages.json`.
+## How it plays
 
-## First-time setup
+- **Swap** two neighbouring pieces to line up 3 or more of a colour. 4 in a line makes a **rocket**, an L or T a
+  **bomb**, a 2×2 a **glider**, 5 in a line a **disco**. Two specials swapped together combine.
+- **Obstacles:** crates (1–2 hits), ice under pieces, chains that lock a piece, **oil** that spreads one cell after
+  every move that clears none, and **trophies** that must be brought down to the bottom row.
+- **Riders:** up to two in the squad. Clearing their colour fills their charge; a full rider's power uses no move.
+- **Between levels:** stars restore the club (5 areas × 6 tasks, each area ends with a story beat), gems recruit
+  riders, coins buy boosters and "+5 moves" when you run out. Lives refill over time.
+- **First session:** a new player boots straight into level 1 with a fingertip showing the swap; levels 2 and 3
+  open on a rocket and a bomb; Home appears after level 3, pointing at the first task to restore.
 
-1. Install the latest **Unity 6 LTS** in Unity Hub with **Android Build Support** (including OpenJDK
-   and the Android SDK and NDK) and **Windows Build Support**. Sign in with your *personal* Unity account
-   (a Personal licence is free).
-2. In Unity Hub, create a throwaway project from the **Universal 2D** template, e.g. `C:\PJ\_u2d`.
-3. Adopt its settings into this repo:
-   ```bash
-   node Tools/setup/adopt-unity-project.mjs C:/PJ/_u2d
-   ```
-4. Unity Hub → **Add project from disk** → this folder. Let packages import.
-5. Run the menu **Template > Apply Project Setup**, open `Assets/_Project/Scenes/Boot.unity`, press **Play**.
-6. **Window > General > Test Runner > EditMode > Run All.** Everything should pass.
+<p>
+  <img src="docs/screenshots/rider-powers.png" width="200" alt="Level 20 with both riders' portraits glowing, ready to fire">
+  <img src="docs/screenshots/oil.png" width="200" alt="Level 22: oil spills in the corners and centre">
+  <img src="docs/screenshots/trophies.png" width="200" alt="Level 26: a trophy on its way down">
+  <img src="docs/screenshots/home-japanese.png" width="200" alt="Home in Japanese: the workshop's restoration tasks">
+</p>
 
-## Starting a new game from the template
+## How it's built
 
-1. On GitHub: **Use this template → Create a new repository** (public, so Actions minutes are free).
-2. Clone it, then complete steps 2–5 above. The template's Unity settings are per-machine, so adopt again.
-3. Change the identity in `Assets/_Project/Editor/Setup/TemplateSetup.cs` (`productName`, application
-   id `com.tranvantruong.<game>`) and re-run **Apply Project Setup**.
-4. Edit `SaveSchema` (`Assets/_Project/Scripts/Core/Save/SaveMigrator.cs`) for your game's save data.
-5. Point `CreateScene("Title", …)` and `CreateScene("Game", …)` in `TemplateSetup.cs` at your own
-   controllers (add your runtime assembly to `Template.Editor.asmdef`), then delete
-   `Assets/_Project/Scripts/Runtime/Game/Sample/` and re-run **Apply Project Setup**. The settings popup
-   (`UI/SettingsPanelView`) is shared, so it stays.
+```
+Assets/_Game/Scripts/Core/      the game in pure C# (no UnityEngine): Board, MatchFinder, MoveResolver, Gravity,
+                                LevelState, riders and powers, Bot + LevelSimulator, ClubSave, gacha, MasterData
+Assets/_Game/Scripts/Runtime/   Unity side: LevelController, BoardView (replays board events), Home, Recruit,
+                                procedural piece art, localization (Loc)
+Assets/_Game/Resources/         30 level files (JSON) and master data (CSV: riders, banner, rates, areas, strings…)
+Assets/_Game/Editor/            level editor with a built-in bot simulator; UI asset builder (fonts, theme)
+Assets/_Game/Tests/             EditMode tests (also run with dotnet), PlayMode smoke test and trailer capture
+Assets/_Project/                shared template: boot flow, saves, audio, haptics, UI stack, game feel
+```
 
-## Everyday commands
+- **A board model that emits events.** A move is resolved entirely in Core and returns a list of events
+  (swapped, cleared, special created, fell, spawned, crate hit, oil spread…). `BoardView` replays them step by
+  step, then checks that it matches the Core board; the smoke test fails if it ever has to resync.
+- **Levels tuned by a bot.** A greedy bot plays every level 200 times; each level's move limit puts its win rate in
+  a target band (easy 90–100%, normal 65–80%, hard bump 40–55%, finale 35–45%). CI runs the check on every push:
+
+  ![Greedy-bot win rate per level against its target band](docs/win-rates.svg)
+
+- **Gacha shown honestly.** R/SR/SSR at 80/17/3%, an SSR guaranteed by pull 60 (the counter is on screen), an SR or
+  better in every 10-pull, half of SSRs are the featured rider, duplicates become shards that level riders up. The
+  rates screen lists every rider's chance. Gems come only from playing; the shop is a demo with no real purchases.
+- **Data-driven.** Riders, banner, rates, renovation, boosters, daily gifts, shop and all UI text live in CSV,
+  validated on load and in tests (a test checks every on-screen string has Vietnamese and Japanese).
+
+More in the [case study](docs/case-study.md).
+
+## Tests
 
 ```bash
-dotnet test Tools/CoreTests/Template.Core.Tests.csproj     # core logic tests, ~5 s
+dotnet test Tools/GameTests/CadenceClub.Core.Tests.csproj   # game core + level and master-data files, ~3 min
+dotnet test Tools/CoreTests/Template.Core.Tests.csproj      # template core
 ```
+
+In Unity (headless, Windows):
 
 ```bash
-powershell -ExecutionPolicy Bypass -File Tools/run-unity-tests.ps1   # all EditMode tests inside Unity, headless
+powershell -ExecutionPolicy Bypass -File Tools/run-unity-tests.ps1                                  # EditMode
+powershell -ExecutionPolicy Bypass -File Tools/run-unity-tests.ps1 -TestPlatform PlayMode -Graphics # smoke test, screenshots in Logs/screenshots
 ```
 
-Add `-TestPlatform PlayMode -Graphics` for PlayMode tests that need rendering (e.g. smoke tests that save
-screenshots).
+## Credits
 
-| Task | How |
-|---|---|
-| Build APK locally | Menu **Template > Build > Android APK** (set `ANDROID_KEYSTORE_PATH` + passwords as environment variables to sign) |
-| Build for Google Play | **Template > Build > Android App Bundle** |
-| Build Windows | **Template > Build > Windows** (portrait 540×960 window) |
-| Import master data | Edit `MasterData/*.csv`, then **Template > Import Master Data** |
-| Debug overlay | **F1**, or a four-finger tap on the phone (editor and development builds only) |
-| Release | `git tag v1.0.0 && git push --tags`, then let CI build and publish |
+- Fonts: [Baloo 2](https://github.com/EkType/Baloo2) and [M PLUS Rounded 1c](https://github.com/google/fonts/tree/main/ofl/mplusrounded1c)
+  (SIL Open Font License, see `Assets/_Game/Fonts`). Icons: [Kenney](https://kenney.nl) (CC0).
+- Inspired by Royal Match. Original art, characters, levels and the rider-booster twist are mine.
 
-## Release setup (once per game repo)
-
-Run this yourself in a terminal. It asks for the passwords, creates the signing keystore outside the
-repo (`%USERPROFILE%\.keystores\<game>.keystore`) and uploads everything below to GitHub:
-
-```bash
-powershell -ExecutionPolicy Bypass -File Tools/setup-release-secrets.ps1
-```
-
-Or set them by hand in Repo → Settings → Secrets and variables → Actions:
-
-| Secret / variable | Value |
-|---|---|
-| `UNITY_LICENSE`, `UNITY_EMAIL`, `UNITY_PASSWORD` | Personal licence for CI. Follow [GameCI activation](https://game.ci/docs/github/activation) |
-| `ANDROID_KEYSTORE_BASE64` | `base64 -w0 your.keystore` (create the keystore once in Unity, **back it up**, never commit it) |
-| `ANDROID_KEYSTORE_PASS`, `ANDROID_KEYALIAS_NAME`, `ANDROID_KEYALIAS_PASS` | From your password manager |
-| `BUTLER_API_KEY` | itch.io → Settings → API keys |
-| Variables `ITCH_USER`, `ITCH_GAME` | e.g. `tranvantruong` / `tailwind`. Leave unset to skip itch.io |
-
-## Structure
-
-```
-Assets/_Project/
-  Scripts/Core/      pure C#: rules, data, saves (Template.Core.asmdef, noEngineReferences)
-  Scripts/Runtime/   Unity: Infra/ (services, save, audio, device), UI/, Feel/, Game/ (flow, boot, debug, sample)
-  Editor/            setup, builds, master-data importers
-  Tests/EditMode/    tests (also run by dotnet via Tools/CoreTests)
-  Scenes/            created by Apply Project Setup
-MasterData/          CSV source of truth for game data
-Tools/               dotnet test projects, setup scripts
-.github/workflows/   core tests, Unity tests, release
-```
-
-## Conventions
-
-- Rules and numbers live in **Core**, as plain C# with tests. Views stay thin.
-- No `GameObject.Find`, no allocations in gameplay loops, pool what spawns often.
-- Gameplay randomness uses `SeededRandom`, never `UnityEngine.Random`.
-- One feature per branch → PR → squash merge.
-- AI assistance is welcome. See `CLAUDE.md` for the rules agents follow in this repo.
-
-## Licences
-
-Template code: MIT (see `LICENSE`). UniTask (MIT), PrimeTween (its own licence, installed via the
-package manager as it allows), Newtonsoft JSON (MIT) and Unity packages are fetched by Unity, not stored
-in this repo.
+MIT licence (code). See [LICENSE](LICENSE).
