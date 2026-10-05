@@ -23,7 +23,7 @@ powers are your boosters: a sprinter fires rockets along a row, a mechanic break
 |---|---|
 | **Inspired by** | Royal Match (swap-to-match, specials, a home to restore between levels) |
 | **Twist** | Riders as boosters: matching a rider's colour charges their power; tap the full portrait to fire it |
-| **My role** | Solo: design, code, levels, tuning. Art is drawn in code; icons are Kenney's |
+| **My role** | Solo: design, code, levels, tuning. Art and sound (effects, two music loops) are made in code; icons are Kenney's |
 | **Engine** | Unity 6.3 LTS (URP 2D), C#. Built from [unity-mobile-template](https://github.com/tranvantruongdev/unity-mobile-template) |
 
 ## How it plays
