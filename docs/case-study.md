@@ -86,6 +86,9 @@ The roller is pure C#, with seeded tests:
 - **First session:** a new player boots straight into level 1 (the template's boot flow got a hook for this). The
   hint comes after 1.5 s with a fingertip sliding along the swap. The win card only says "Next level", and after
   level 3 it says "Continue" and opens Home, where a fingertip points at the first task to restore.
+- **Home as a place:** each area is a flat illustration built from UI shapes (rounded boxes, ellipses, rings). Every
+  renovation task is its own drawing in the scene: a faint ghost with a ★ bubble until it's built, then it pops in.
+  The last task of an area tells its story beat.
 - **Coin sinks:** pre-level boosters (rockets, bomb, disco placed on the board), and "+5 moves" for 300 coins when
   out of moves, with the life charged only if you leave.
 - **Localization (EN/VI/JA):** one table in CSV, keyed by the English text, so code reads `Loc.T("Shop")`. A test

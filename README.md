@@ -39,10 +39,11 @@ powers are your boosters: a sprinter fires rockets along a row, a mechanic break
   open on a rocket and a bomb; Home appears after level 3, pointing at the first task to restore.
 
 <p>
-  <img src="docs/screenshots/rider-powers.png" width="200" alt="Level 20 with both riders' portraits glowing, ready to fire">
-  <img src="docs/screenshots/oil.png" width="200" alt="Level 22: oil spills in the corners and centre">
-  <img src="docs/screenshots/trophies.png" width="200" alt="Level 26: a trophy on its way down">
-  <img src="docs/screenshots/home-japanese.png" width="200" alt="Home in Japanese: the workshop's restoration tasks">
+  <img src="docs/screenshots/rider-powers.png" width="160" alt="Level 20 with both riders' portraits glowing, ready to fire">
+  <img src="docs/screenshots/oil.png" width="160" alt="Level 22: oil spills in the corners and centre">
+  <img src="docs/screenshots/trophies.png" width="160" alt="Level 26: a trophy on its way down">
+  <img src="docs/screenshots/home-velodrome.png" width="160" alt="Home: the velodrome stands half restored, with bubbles on the tasks still to do">
+  <img src="docs/screenshots/home-japanese.png" width="160" alt="Home in Japanese: the workshop, its tasks named in Japanese">
 </p>
 
 ## How it's built

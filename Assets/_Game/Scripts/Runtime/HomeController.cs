@@ -185,22 +185,56 @@ namespace CadenceClub
                 UiFactory.CreateRounded(_area, new Vector2(-440f + width * 0.5f, 240f), new Vector2(width, 22f), theme.accent, 11);
             }
 
-            // First-session script: until anything is built, a fingertip points at the first task the player can afford.
-            var firstTask = club.built.Count == 0 ? tasks.FirstOrDefault(t => !club.IsBuilt(t.id) && club.stars >= t.stars) : null;
-            for (int i = 0; i < tasks.Count; i++)
+            // The area's illustration: built tasks in place, the rest as faint ghosts of what they'll be.
+            var scene = AreaArt.Scene(_area, area.id, new Vector2(0f, -130f));
+            foreach (var task in tasks)
             {
-                var tile = BuildTask(tasks[i], new Vector2(i % 2 == 0 ? -232f : 232f, 90f - (i / 2) * 220f));
-                if (tasks[i].id == justBuilt && !JuiceFx.ReduceMotion)
+                var item = AreaArt.Item(scene, task.id);
+                if (item == null)
                 {
-                    tile.localScale = Vector3.one * 0.6f;
-                    Tween.Scale(tile, 1f, 0.45f, Ease.OutBack);
+                    continue;
                 }
 
-                if (tasks[i] == firstTask)
+                if (!club.IsBuilt(task.id))
                 {
-                    Pointer(tile, new Vector2(165f, -80f)); // just right of the Build button
+                    item.gameObject.AddComponent<CanvasGroup>().alpha = 0.18f;
+                }
+                else if (task.id == justBuilt && !JuiceFx.ReduceMotion)
+                {
+                    item.localScale = Vector3.zero;
+                    Tween.Scale(item, 1f, 0.5f, Ease.OutBack);
                 }
             }
+
+            // Then, on top, a ★ bubble for each task still to restore. First-session script: until anything is built,
+            // a fingertip points at the first one the player can afford.
+            var firstTask = club.built.Count == 0 ? tasks.FirstOrDefault(t => !club.IsBuilt(t.id) && club.stars >= t.stars) : null;
+            foreach (var task in tasks.Where(t => !club.IsBuilt(t.id)))
+            {
+                var at = AreaArt.BubbleAt(task.id);
+                Bubble(scene, task, at);
+                if (task == firstTask)
+                {
+                    Pointer(scene, at + new Vector2(95f, -40f));
+                }
+            }
+        }
+
+        /// <summary>A task still to restore: a button with its ★ cost where the item will appear, and its name under it.</summary>
+        private void Bubble(RectTransform scene, TaskDef task, Vector2 at)
+        {
+            var theme = UiTheme.Current;
+            bool affordable = Club.Data.stars >= task.stars;
+            UiFactory.CreateButton(scene, task.stars.ToString(), at, new Vector2(150f, 84f), () => Build(task),
+                affordable ? ButtonStyle.Primary : ButtonStyle.Secondary, theme.iconStar);
+            UiFactory.CreateRounded(scene, at + new Vector2(0f, -70f), new Vector2(240f, 44f), new Color(0.07f, 0.11f, 0.18f, 0.78f), 22);
+            var name = UiFactory.CreateText(scene, Loc.T(task.name), 26, at + new Vector2(0f, -69f), new Vector2(226f, 40f), TextAlignmentOptions.Center,
+                UiFont.Display);
+            name.color = Color.white;
+            name.textWrappingMode = TextWrappingModes.NoWrap;
+            name.enableAutoSizing = true;
+            name.fontSizeMin = 16f;
+            name.fontSizeMax = 26f;
         }
 
         private static void Pointer(RectTransform parent, Vector2 at)
@@ -215,34 +249,6 @@ namespace CadenceClub
             {
                 Tween.LocalPositionY(pointer, pointer.localPosition.y + 30f, 0.5f, Ease.InOutSine, cycles: -1, cycleMode: CycleMode.Yoyo);
             }
-        }
-
-        private RectTransform BuildTask(TaskDef task, Vector2 position)
-        {
-            var theme = UiTheme.Current;
-            var club = Club.Data;
-            bool built = club.IsBuilt(task.id);
-            var tile = UiFactory.CreateRect(task.id, _area);
-            tile.anchorMin = tile.anchorMax = new Vector2(0.5f, 0.5f);
-            tile.anchoredPosition = position;
-            tile.sizeDelta = new Vector2(440f, 200f);
-            UiFactory.CreateRounded(tile, Vector2.zero, tile.sizeDelta, built ? Color.Lerp(theme.accent, Color.white, 0.55f) : theme.paperEdge, 28);
-            if (built)
-            {
-                UiFactory.CreateImage(tile, theme.iconCheck, new Vector2(-160f, 0f), new Vector2(70f, 70f), new Color(0.25f, 0.62f, 0.33f));
-                UiFactory.CreateText(tile, Loc.T(task.name), 40, new Vector2(40f, 0f), new Vector2(320f, 160f), TextAlignmentOptions.MidlineLeft, UiFont.Display)
-                    .color = theme.ink;
-            }
-            else
-            {
-                UiFactory.CreateText(tile, Loc.T(task.name), 38, new Vector2(0f, 45f), new Vector2(400f, 70f), TextAlignmentOptions.Center, UiFont.Display)
-                    .color = theme.muted;
-                bool affordable = club.stars >= task.stars;
-                UiFactory.CreateButton(tile, Loc.F("Build · {0}", task.stars), new Vector2(0f, -40f), new Vector2(250f, 84f), () => Build(task),
-                    affordable ? ButtonStyle.Primary : ButtonStyle.Secondary, theme.iconStar);
-            }
-
-            return tile;
         }
 
         private void Build(TaskDef task)

@@ -283,6 +283,29 @@ namespace CadenceClub.PlayModeTests
                 yield return WaitForScene("Title", 20f);
                 yield return new WaitForSeconds(0.6f);
 
+                // Every area's illustration, half restored: each task has a drawing, built or still a ghost with a bubble.
+                var areasHome = Object.FindAnyObjectByType<HomeController>();
+                var builtBefore = club.built.ToList();
+                foreach (var areaDef in md.Areas)
+                {
+                    club.built.Clear();
+                    club.built.AddRange(md.Tasks.Where(t => t.area < areaDef.id).Select(t => t.id));
+                    club.built.AddRange(md.Tasks.Where(t => t.area == areaDef.id).Take(3).Select(t => t.id));
+                    typeof(HomeController).GetMethod("BuildArea", Private).Invoke(areasHome, new object[] { null });
+                    yield return null;
+                    foreach (var areaTask in md.Tasks.Where(t => t.area == areaDef.id))
+                    {
+                        Assert.IsNotNull(GameObject.Find(areaTask.id), $"area {areaDef.id}: {areaTask.id} has a drawing");
+                    }
+
+                    Capture($"area-{areaDef.id}");
+                }
+
+                club.built.Clear();
+                club.built.AddRange(builtBefore);
+                typeof(HomeController).GetMethod("BuildArea", Private).Invoke(areasHome, new object[] { null });
+                yield return null;
+
                 // Settings → 日本語: closing the panel rebuilds Home in Japanese; then the same for Tiếng Việt.
                 foreach (var (code, name) in new[] { ("ja", "日本語"), ("vi", "Tiếng Việt") })
                 {
