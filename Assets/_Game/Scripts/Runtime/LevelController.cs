@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CadenceClub.Audio;
 using CadenceClub.Core;
 using CadenceClub.UI;
 using CadenceClub.View;
@@ -70,6 +71,7 @@ namespace CadenceClub
             Club.PendingBoosters.Clear(); // bought for this level's first try only
             AppLifecycle.BackPressed += GoHome;
             Play(Levels.Override ?? Levels.Next(Club.Data.level));
+            ClubAudio.Music(ClubAudio.LevelMusic);
         }
 
         private void OnDestroy() => AppLifecycle.BackPressed -= GoHome;
@@ -140,6 +142,7 @@ namespace CadenceClub
             }
 
             _state.Continue(md.Int("extra_moves"));
+            ClubAudio.Play(ClubAudio.Coin);
             _lifeOwed = false;
             Club.Save();
             _hud.HideEnd();
@@ -330,6 +333,7 @@ namespace CadenceClub
 
             _busy = true;
             Haptics.Medium();
+            ClubAudio.Play(ClubAudio.Power);
             await _board.Play(events, _state.Board, OnStep);
             await VictoryLap();
             Finish();
@@ -360,6 +364,7 @@ namespace CadenceClub
                     Haptics.Medium();
                 }
 
+                ClubAudio.Play(_state.Outcome == LevelOutcome.Won ? ClubAudio.Win : ClubAudio.Lose);
                 string rewards = Settle();
                 var md = Club.Master;
                 // The first session's last win leads Home, where the first renovation task waits; before it, only on.
@@ -376,13 +381,23 @@ namespace CadenceClub
         private void OnStep(int step, List<BoardEvent> events, int from, int to)
         {
             _audio.PlaySfx(_pop, 0.6f, 1f + Mathf.Min(step, 8) * 0.1f); // each cascade step a little higher
+            bool created = false;
+            bool blasted = false;
             for (int i = from; i < to; i++)
             {
-                if (events[i].type == BoardEventType.SpecialCreated)
-                {
-                    Haptics.Light();
-                    break;
-                }
+                created |= events[i].type == BoardEventType.SpecialCreated;
+                blasted |= events[i].type == BoardEventType.SpecialActivated;
+            }
+
+            if (created)
+            {
+                Haptics.Light();
+                ClubAudio.Play(ClubAudio.Special, 0.7f);
+            }
+
+            if (blasted)
+            {
+                ClubAudio.Play(ClubAudio.Blast, 0.6f); // once a step, however many specials go off
             }
         }
 

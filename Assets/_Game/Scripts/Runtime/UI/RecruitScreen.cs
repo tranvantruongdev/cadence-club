@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using CadenceClub.Art;
+using CadenceClub.Audio;
 using CadenceClub.Core;
 using Cysharp.Threading.Tasks;
 using PrimeTween;
@@ -340,7 +341,8 @@ namespace CadenceClub.UI
 
         private async UniTask Run(IReadOnlyList<PullOutcome> outcomes)
         {
-            // 1. Build-up: two wheels roll in.
+            // 1. Build-up: two wheels roll in, to a bike bell.
+            ClubAudio.Play(ClubAudio.Bell);
             for (int i = 0; i < 2; i++)
             {
                 var wheelImage = UiFactory.CreateImage(_content, PieceArt.Piece(0), new Vector2(-900f - i * 200f, 520f), new Vector2(170f, 170f), Color.white);
@@ -358,6 +360,7 @@ namespace CadenceClub.UI
             var best = outcomes.Max(o => o.pull.rarity);
             var tint = ClubUi.RarityColor(best);
             Tween.Color(_flash, new Color(tint.r, tint.g, tint.b, best == Rarity.R ? 0.15f : 0.5f), 0.25f / _speed, cycles: 2, cycleMode: CycleMode.Yoyo);
+            ClubAudio.Play(ClubAudio.Special, 0.8f, best == Rarity.SSR ? 1.25f : best == Rarity.SR ? 1.1f : 1f);
             foreach (var card in _cards)
             {
                 Tween.Scale(card.root, 1f, 0.25f / _speed, Ease.OutBack);
@@ -378,6 +381,7 @@ namespace CadenceClub.UI
                 if (ssr)
                 {
                     Haptics.Medium();
+                    ClubAudio.Play(ClubAudio.Fanfare);
                     Burst(card.root);
                     var rider = Club.Master.Rider(card.outcome.pull.riderId);
                     var line = UiFactory.CreateText(_content, Loc.F("{0}: “{1}”", rider.name, Line(rider.role)), 56, new Vector2(0f, -560f), new Vector2(980f, 120f),
@@ -396,6 +400,8 @@ namespace CadenceClub.UI
             await Tween.Scale(card.root, new Vector3(0f, 1f, 1f), seconds * 0.5f / _speed, Ease.InSine);
             card.back.SetActive(false);
             card.front.SetActive(true);
+            var rarity = card.outcome.pull.rarity;
+            ClubAudio.Play(ClubAudio.Flip, 0.7f, rarity == Rarity.SSR ? 1.3f : rarity == Rarity.SR ? 1.15f : 1f);
             await Tween.Scale(card.root, Vector3.one, seconds * 0.5f / _speed, Ease.OutBack);
         }
 

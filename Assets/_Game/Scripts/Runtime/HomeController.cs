@@ -1,5 +1,6 @@
 using System.Linq;
 using CadenceClub.Art;
+using CadenceClub.Audio;
 using CadenceClub.Core;
 using CadenceClub.UI;
 using Cysharp.Threading.Tasks;
@@ -83,6 +84,7 @@ namespace CadenceClub
             _shop = ShopScreen.Create(canvas.transform, _stack);
             BuildNav();
             RefreshWallet();
+            ClubAudio.Music(ClubAudio.HomeMusic);
             Welcome().Forget();
         }
 
@@ -262,8 +264,10 @@ namespace CadenceClub
 
             Club.Save();
             Haptics.Medium();
+            ClubAudio.Play(ClubAudio.Chime);
             if (result.completedArea != null)
             {
+                ClubAudio.Play(ClubAudio.Bell); // the club's bell for each area restored
                 _story.OpenAsync(result.completedArea, result.gems).Forget();
             }
 

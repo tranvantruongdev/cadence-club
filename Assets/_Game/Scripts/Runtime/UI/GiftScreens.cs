@@ -1,5 +1,6 @@
 using System;
 using CadenceClub.Art;
+using CadenceClub.Audio;
 using Cysharp.Threading.Tasks;
 using Template.Feel;
 using Template.Infra.Device;
@@ -98,6 +99,7 @@ namespace CadenceClub.UI
 
             Club.Save();
             Haptics.Medium();
+            ClubAudio.Play(ClubAudio.Coin);
             Build();
             JuiceFx.Punch(_card, 0.06f, 0.3f);
         }
@@ -181,6 +183,7 @@ namespace CadenceClub.UI
 
             Club.Save();
             Haptics.Light();
+            ClubAudio.Play(ClubAudio.Coin);
             Build();
         }
     }

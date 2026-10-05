@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using CadenceClub.Art;
+using CadenceClub.Audio;
 using CadenceClub.Core;
 using Cysharp.Threading.Tasks;
 using Template.Feel;
@@ -218,6 +219,11 @@ namespace CadenceClub.UI
             {
                 JuiceFx.Punch(_boosterRow, 0.05f, 0.2f);
                 return;
+            }
+
+            if (_picked.Count > 0)
+            {
+                ClubAudio.Play(ClubAudio.Coin);
             }
 
             Club.PendingBoosters.Clear();
