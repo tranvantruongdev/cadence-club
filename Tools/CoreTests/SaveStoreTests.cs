@@ -68,10 +68,17 @@ namespace Template.Core.Tests
             service.Data.bestScore = 888;
             service.MarkDirty();
 
-            using (var held = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+            // An occupied destination fails promotion on Windows and Unix; file-sharing locks do not.
+            File.Delete(path);
+            Directory.CreateDirectory(path);
+            try
             {
                 service.Save();
                 Assert.IsTrue(service.IsDirty);
+            }
+            finally
+            {
+                Directory.Delete(path);
             }
 
             Assert.AreEqual(777, Codec().Deserialize(File.ReadAllText(path + ".bak")).bestScore);
@@ -81,6 +88,25 @@ namespace Template.Core.Tests
             recovered.Load();
             Assert.AreEqual("Temp", recovered.LoadedFrom);
             Assert.AreEqual(888, recovered.Data.bestScore);
+        }
+
+        [Test]
+        public void Saving_recovered_data_does_not_back_up_corrupt_primary()
+        {
+            var store = new FileSaveStore("corrupt-primary.json");
+            string path = store.FilePath;
+            File.WriteAllText(path, "{broken");
+            File.WriteAllText(path + ".bak", JsonWithScore(777));
+            var service = new SaveService(store, Codec());
+            service.Load();
+            Assert.AreEqual("Backup", service.LoadedFrom);
+            service.Data.bestScore = 888;
+
+            service.Save();
+
+            Assert.IsFalse(service.IsDirty);
+            Assert.AreEqual(888, Codec().Deserialize(File.ReadAllText(path)).bestScore);
+            Assert.AreEqual(777, Codec().Deserialize(File.ReadAllText(path + ".bak")).bestScore);
         }
 
         [Test]
