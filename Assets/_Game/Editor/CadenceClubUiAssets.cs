@@ -46,6 +46,21 @@ namespace CadenceClub.EditorTools
             EditorApplication.Exit(ok ? 0 : 1);
         }
 
+        /// <summary>Updates only the Japanese atlas, without rebuilding scenes, theme, icons or other fonts.</summary>
+        public static void RefreshJapaneseFontBatch()
+        {
+            try
+            {
+                JapaneseFont(CharacterSet());
+                EditorApplication.Exit(0);
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+                EditorApplication.Exit(1);
+            }
+        }
+
         private static bool Run(bool force)
         {
             TextSetup.EnsureEssentials();
@@ -146,8 +161,35 @@ namespace CadenceClub.EditorTools
             string text = File.ReadAllText("Assets/_Game/Resources/MasterData/strings.csv") + languageNames;
             var needed = new string(text.Where(c => !char.IsControl(c) && latin.IndexOf(c) < 0).Distinct().OrderBy(c => c).ToArray());
             var existing = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>($"{FontsFolder}/{file} SDF.asset");
-            bool upToDate = existing != null && existing.HasCharacters(needed, out List<char> _);
-            return FontAsset(file, 56, 6, 2048, 2048, needed, !upToDate);
+            if (existing == null)
+            {
+                return FontAsset(file, 56, 6, 2048, 2048, needed, false);
+            }
+
+            if (existing.HasCharacters(needed, out List<char> _))
+            {
+                return existing;
+            }
+
+            // Extend the shipped atlas in place: preserve its GUID and every fallback reference.
+            existing.atlasPopulationMode = AtlasPopulationMode.Dynamic;
+            try
+            {
+                if (!existing.TryAddCharacters(needed, out string missing))
+                {
+                    throw new InvalidOperationException($"Japanese atlas cannot cover localized text: {missing}");
+                }
+            }
+            finally
+            {
+                existing.atlasPopulationMode = AtlasPopulationMode.Static;
+            }
+
+            EditorUtility.SetDirty(existing);
+            EditorUtility.SetDirty(existing.atlasTexture);
+            AssetDatabase.SaveAssets();
+            Debug.Log($"[Cadence Club] Japanese atlas updated in place: {existing.characterTable.Count} characters.");
+            return existing;
         }
 
         private static void AddFallback(TMP_FontAsset font, TMP_FontAsset fallback)
