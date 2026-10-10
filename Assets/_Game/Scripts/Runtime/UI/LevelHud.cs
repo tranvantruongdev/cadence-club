@@ -29,6 +29,7 @@ namespace CadenceClub.UI
         private GameObject _continue;
         private GameObject _retry;
         private GameObject _home;
+        private GameObject _pause;
         private int _shownMoves = -1;
         private RectTransform _safe;
         private readonly List<Portrait> _portraits = new List<Portrait>();
@@ -37,6 +38,7 @@ namespace CadenceClub.UI
         public event Action RetryPressed;
         public event Action NextPressed;
         public event Action ContinuePressed;
+        public event Action ResumePressed;
         public event Action HomePressed;
 
         /// <summary>A squad portrait was tapped (slot index).</summary>
@@ -97,6 +99,23 @@ namespace CadenceClub.UI
             UiFactory.Place(home, new Vector2(0f, 0f), new Vector2(92f, 92f));
 
             BuildEndCard(theme);
+            BuildPauseCard(theme);
+        }
+
+        private void BuildPauseCard(UiTheme theme)
+        {
+            var overlay = UiFactory.CreateOverlay(transform);
+            overlay.name = "Pause";
+            _pause = overlay.gameObject;
+            var card = UiFactory.CreateCard(overlay.rectTransform, Vector2.zero, new Vector2(860f, 560f));
+            var title = UiFactory.CreateText(card, Loc.T("Paused"), 88, new Vector2(0f, 170f), new Vector2(780f, 120f),
+                TextAlignmentOptions.Center, UiFont.Display);
+            title.color = theme.ink;
+            UiFactory.CreateButton(card, Loc.T("Continue"), new Vector2(0f, 10f), new Vector2(680f, 140f),
+                () => ResumePressed?.Invoke(), ButtonStyle.Primary, theme.iconPlay);
+            UiFactory.CreateButton(card, Loc.T("Home"), new Vector2(0f, -170f), new Vector2(680f, 120f),
+                () => HomePressed?.Invoke(), ButtonStyle.Secondary, theme.iconHome);
+            _pause.SetActive(false);
         }
 
         private void BuildEndCard(UiTheme theme)
@@ -210,6 +229,8 @@ namespace CadenceClub.UI
         }
 
         public void HideEnd() => _end.SetActive(false);
+
+        public void ShowPause(bool visible) => _pause.SetActive(visible);
 
         /// <summary>
         /// Rider portraits along the bottom (the thumb zone): a charge ring in the rider's colour fills as their pieces

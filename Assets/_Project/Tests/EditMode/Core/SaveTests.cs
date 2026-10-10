@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using Template.Core.Save;
@@ -10,11 +12,20 @@ namespace Template.Core.Tests
         private sealed class MemoryStore : ISaveStore
         {
             public string Main;
+            public string Temp;
             public string Backup;
             public int Writes;
+            public int WriteAttempts;
+            public int FailWriteAttempts;
+            public Exception MainReadError;
 
             public bool TryLoad(out string json)
             {
+                if (MainReadError != null)
+                {
+                    throw MainReadError;
+                }
+
                 json = Main;
                 return Main != null;
             }
@@ -25,9 +36,22 @@ namespace Template.Core.Tests
                 return Backup != null;
             }
 
-            public void Save(string json)
+            public bool TryLoadTemp(out string json)
             {
-                Backup = Main;
+                json = Temp;
+                return Temp != null;
+            }
+
+            public void Save(string json, string lastKnownGoodJson)
+            {
+                WriteAttempts++;
+                if (FailWriteAttempts > 0)
+                {
+                    FailWriteAttempts--;
+                    throw new IOException("injected transient write failure");
+                }
+
+                if (lastKnownGoodJson != null) { Backup = lastKnownGoodJson; }
                 Main = json;
                 Writes++;
             }
@@ -35,11 +59,19 @@ namespace Template.Core.Tests
             public void Delete()
             {
                 Main = null;
+                Temp = null;
                 Backup = null;
             }
         }
 
         private static SaveCodec Codec() => new SaveCodec(SaveSchema.CreateMigrator());
+
+        private static string JsonWithScore(int score)
+        {
+            var data = SaveCodec.New();
+            data.bestScore = score;
+            return Codec().Serialize(data);
+        }
 
         [Test]
         public void Migrator_upgrades_v1_save()
@@ -52,6 +84,16 @@ namespace Template.Core.Tests
             Assert.AreEqual(42, (int)data["bestScore"]);
             Assert.IsNull(data["best"]);
             Assert.AreEqual(0, (int)data["totalRuns"]);
+        }
+
+        [Test]
+        public void Migrator_adds_no_pending_loss_to_existing_v2_game_save()
+        {
+            var data = JObject.Parse("{\"saveVersion\":2,\"game\":{\"level\":4}}");
+            SaveSchema.CreateMigrator().Migrate(data);
+
+            Assert.AreEqual(3, (int)data["saveVersion"]);
+            Assert.AreEqual(false, (bool)data["game"]["pendingLoss"]);
         }
 
         [Test]
@@ -105,6 +147,51 @@ namespace Template.Core.Tests
             Assert.AreEqual("en", broken.settings.language);
         }
 
+        [TestCase("")]
+        [TestCase("   ")]
+        public void Codec_rejects_empty_save_json(string json)
+        {
+            Assert.Throws<Newtonsoft.Json.JsonReaderException>(() => Codec().Deserialize(json));
+        }
+
+        [Test]
+        public void Service_falls_back_to_backup_when_primary_is_empty()
+        {
+            var store = new MemoryStore { Main = "", Backup = JsonWithScore(777) };
+            var service = new SaveService(store, Codec());
+            service.Load();
+
+            Assert.AreEqual("Backup", service.LoadedFrom);
+            Assert.AreEqual(777, service.Data.bestScore);
+            Assert.IsTrue(service.IsDirty, "recovered data needs a safe rewrite");
+        }
+
+        [Test]
+        public void Service_falls_back_to_backup_when_primary_read_throws()
+        {
+            var store = new MemoryStore
+            {
+                MainReadError = new IOException("injected read lock"),
+                Backup = JsonWithScore(777),
+            };
+            var service = new SaveService(store, Codec());
+            Assert.DoesNotThrow(() => service.Load());
+
+            Assert.AreEqual("Backup", service.LoadedFrom);
+            Assert.AreEqual(777, service.Data.bestScore);
+        }
+
+        [Test]
+        public void Service_falls_back_to_temp_before_backup_when_main_is_corrupt()
+        {
+            var store = new MemoryStore { Main = "{ broken", Temp = JsonWithScore(888), Backup = JsonWithScore(777) };
+            var service = new SaveService(store, Codec());
+            service.Load();
+
+            Assert.AreEqual("Temp", service.LoadedFrom);
+            Assert.AreEqual(888, service.Data.bestScore);
+            Assert.IsTrue(service.IsDirty);
+        }
         [Test]
         public void Service_falls_back_to_backup_when_main_is_corrupt()
         {
@@ -148,6 +235,27 @@ namespace Template.Core.Tests
             service.SaveIfDirty();
             Assert.AreEqual(1, store.Writes);
             Assert.IsFalse(service.IsDirty);
+        }
+
+        [Test]
+        public void Failed_direct_save_remains_dirty_and_retries()
+        {
+            var store = new MemoryStore { FailWriteAttempts = 1 };
+            var service = new SaveService(store, Codec());
+            int savedEvents = 0;
+            service.Saved += () => savedEvents++;
+            service.Data.bestScore = 999;
+
+            service.Save();
+            Assert.IsTrue(service.IsDirty);
+            Assert.AreEqual(0, savedEvents);
+
+            service.SaveIfDirty();
+            Assert.IsFalse(service.IsDirty);
+            Assert.AreEqual(2, store.WriteAttempts);
+            Assert.AreEqual(1, store.Writes);
+            Assert.AreEqual(1, savedEvents);
+            Assert.AreEqual(999, Codec().Deserialize(store.Main).bestScore);
         }
     }
 }

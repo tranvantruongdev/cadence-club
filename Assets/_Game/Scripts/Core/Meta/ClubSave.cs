@@ -61,6 +61,9 @@ namespace CadenceClub.Core
         public int gems;
         public int lives;
 
+        /// <summary>A loss that still needs its one life charge (resolved on leave or next boot).</summary>
+        public bool pendingLoss;
+
         /// <summary>When the current life started refilling (UTC ticks).</summary>
         public long livesSince;
 
@@ -149,6 +152,33 @@ namespace CadenceClub.Core
         }
 
         // ---- Lives: one refills every life_seconds (60 s in this build) up to lives_max.
+
+        /// <summary>Records a loss until Continue clears it or leaving/reboot resolves its life charge.</summary>
+        public bool MarkPendingLoss()
+        {
+            if (pendingLoss)
+            {
+                return false;
+            }
+
+            pendingLoss = true;
+            return true;
+        }
+
+        public void ClearPendingLoss() => pendingLoss = false;
+
+        /// <summary>Clears and charges a saved loss once. Returns true when a pending loss was resolved.</summary>
+        public bool ResolvePendingLoss(MasterData md, long now)
+        {
+            if (!pendingLoss)
+            {
+                return false;
+            }
+
+            pendingLoss = false;
+            SpendLife(md, now);
+            return true;
+        }
 
         public int Lives(MasterData md, long now)
         {

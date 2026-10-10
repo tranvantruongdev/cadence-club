@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -8,6 +9,7 @@ using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using Template.Core.Random;
 using Template.Core.Save;
+using Template.Game.Boot;
 using Template.Game.Flow;
 using Template.Infra;
 using UnityEngine;
@@ -55,13 +57,56 @@ namespace CadenceClub.PlayModeTests
                 File.Delete(path);
             }
 
+            var firstState = GameBootstrap.FirstState;
+            GameBootstrap.FirstState = () => AppState.Game;
             try
             {
-                // First session: a new player boots straight into level 1, and a fingertip shows the first swap.
+                // Start deterministically in Game even if the Editor carried a prior first-state callback.
                 SceneManager.LoadScene("Boot");
                 yield return WaitForScene("Game", 20f);
                 yield return new WaitForSeconds(2f);
                 var controller = Object.FindAnyObjectByType<LevelController>();
+                Assert.IsNotNull(controller);
+                var backState = State(controller);
+                Assert.IsTrue(TryChooseNonTerminalMove(backState, out var backMove), "the first-session board has a non-terminal move");
+                controller.PlayMove(backMove.a, backMove.b);
+                yield return null;
+                var busy = typeof(LevelController).GetField("_busy", Private);
+                var paused = typeof(LevelController).GetField("_paused", Private);
+                Assert.IsTrue((bool)busy.GetValue(controller), "the board animation is still resolving");
+                PressBack();
+                yield return null;
+                var flow = Services.Get<GameFlow>();
+                var transitioning = typeof(GameFlow).GetField("_transitioning", Private);
+                Assert.IsFalse((bool)transitioning.GetValue(flow), "Back waits for the active move to finish");
+                yield return WaitIdle(controller);
+                Assert.AreEqual("Game", SceneManager.GetActiveScene().name, "Back opens pause after the move resolves");
+                Assert.IsTrue((bool)paused.GetValue(controller), "the safe boundary opens the pause overlay");
+                PressBack();
+                yield return null;
+                Assert.IsFalse((bool)paused.GetValue(controller), "Back resumes from the pause overlay");
+
+                Assert.IsTrue(TryChooseNonTerminalMove(State(controller), out var homeMove), "the resolved board has a non-terminal move");
+                controller.PlayMove(homeMove.a, homeMove.b);
+                yield return null;
+                Assert.IsTrue((bool)busy.GetValue(controller), "the second board animation is still resolving");
+                typeof(LevelController).GetMethod("RequestHome", Private).Invoke(controller, null);
+                yield return null;
+                Assert.IsFalse((bool)transitioning.GetValue(flow), "the Home button also waits for the active move");
+                yield return WaitForScene("Title", 20f);
+                float fadeWait = 0f;
+                while ((bool)transitioning.GetValue(flow))
+                {
+                    fadeWait += Time.unscaledDeltaTime;
+                    Assert.Less(fadeWait, 10f, "the Home transition finishes before starting another one");
+                    yield return null;
+                }
+
+                yield return flow.GoToAsync(AppState.Game).ToCoroutine();
+                yield return WaitForScene("Game", 20f);
+                yield return new WaitForSeconds(2f); // the first-session fingertip appears after FirstSessionHintDelay
+                controller = Object.FindAnyObjectByType<LevelController>();
+                Assert.IsNotNull(controller);
                 var board = (BoardView)typeof(LevelController).GetField("_board", Private).GetValue(controller);
                 Assert.AreEqual(1, State(controller).Def.id, "a new player starts in level 1");
                 Assert.IsTrue(board.IsHinting && board.transform.Find("Finger").gameObject.activeSelf, "the first session shows a fingertip hint at once");
@@ -255,6 +300,7 @@ namespace CadenceClub.PlayModeTests
                 typeof(LevelState).GetProperty("MovesLeft").SetValue(State(controller), 2);
                 yield return PlayToEnd(controller, "obstacles-short");
                 Assert.AreEqual(LevelOutcome.Lost, State(controller).Outcome, "2 moves can't clear level 20");
+                Assert.IsTrue(club.pendingLoss, "the loss is persisted before the end card offers Continue");
                 club.coins = Mathf.Max(club.coins, md.Int("extra_moves_cost"));
                 int coinsBeforeContinue = club.coins;
                 int livesBeforeContinue = club.Lives(md, Club.Now);
@@ -262,6 +308,7 @@ namespace CadenceClub.PlayModeTests
                 Assert.AreEqual((LevelOutcome.Playing, md.Int("extra_moves")), (State(controller).Outcome, State(controller).MovesLeft));
                 Assert.AreEqual(coinsBeforeContinue - md.Int("extra_moves_cost"), club.coins, "+5 moves cost their coins");
                 Assert.AreEqual(livesBeforeContinue, club.Lives(md, Club.Now), "continuing costs no life");
+                Assert.IsFalse(club.pendingLoss, "buying Continue clears the pending loss");
                 yield return new WaitForSeconds(0.3f);
                 Capture("obstacles-continued");
 
@@ -361,9 +408,31 @@ namespace CadenceClub.PlayModeTests
                         yield return jaStack.PopAsync().ToCoroutine();
                     }
                 }
+
+                // A loss left on the card charges once when Home is requested; the boot resolver then has nothing to replay.
+                Levels.Override = 20;
+                yield return EnterGame();
+                controller = Object.FindAnyObjectByType<LevelController>();
+                var quitState = State(controller);
+                typeof(LevelState).GetProperty("MovesLeft").SetValue(quitState, 2);
+                yield return PlayToEnd(controller, "loss-quit");
+                Assert.AreEqual(LevelOutcome.Lost, quitState.Outcome);
+                Assert.IsTrue(club.pendingLoss);
+                int livesBeforeSettlement = club.Lives(md, Club.Now);
+                GameBootstrap.FirstState = Club.ResolveBootState;
+                Assert.AreEqual(AppState.Title, GameBootstrap.FirstState(), "boot resolves the loss before returning to Home");
+                Assert.IsFalse(club.pendingLoss);
+                int livesAfterBoot = club.Lives(md, Club.Now);
+                Assert.AreEqual(livesBeforeSettlement - 1, livesAfterBoot, "boot charges exactly one life");
+                Assert.AreEqual(livesAfterBoot, club.Lives(md, Club.Now), "a second boot does not charge the same loss again");
+
+                typeof(LevelController).GetMethod("GoHome", Private).Invoke(controller, null);
+                yield return WaitForScene("Title", 20f);
+                Assert.AreEqual(livesAfterBoot, club.Lives(md, Club.Now), "leaving after boot resolution does not charge again");
             }
             finally
             {
+                GameBootstrap.FirstState = firstState;
                 Levels.Override = null;
                 Application.logMessageReceived -= OnLog;
                 foreach (var path in new[] { savePath, savePath + ".tmp", savePath + ".bak" }.Where(File.Exists))
@@ -394,6 +463,28 @@ namespace CadenceClub.PlayModeTests
             Assert.AreEqual(next, label.GetType().GetProperty("text").GetValue(label));
         }
 
+        private static bool TryChooseNonTerminalMove(LevelState state, out (Cell a, Cell b) move)
+        {
+            foreach (var candidate in MoveFinder.FindAll(state.Board))
+            {
+                var probe = state.Clone();
+                if (probe.TryMove(candidate.a, candidate.b, new List<BoardEvent>()) && probe.Outcome == LevelOutcome.Playing)
+                {
+                    move = candidate;
+                    return true;
+                }
+            }
+
+            move = default;
+            return false;
+        }
+
+        private static void PressBack()
+        {
+            var field = typeof(Template.Infra.AppLifecycle).GetField("BackPressed", BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.IsNotNull(field, "AppLifecycle.BackPressed event backing field should exist");
+            ((System.Action)field.GetValue(null))?.Invoke();
+        }
         private static LevelState State(LevelController controller) =>
             (LevelState)typeof(LevelController).GetField("_state", Private).GetValue(controller);
 

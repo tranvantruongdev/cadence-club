@@ -14,6 +14,9 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../Assets/_Project/Tests/EditMode/Core/**/*.cs" />
+    <Compile Include="SaveStoreTests.cs" />
+    <Compile Include="UnityEngineApplicationStub.cs" />
+    <Compile Include="../../Assets/_Project/Scripts/Runtime/Infra/Save/FileSaveStore.cs" Link="FileSaveStore.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Core/Template.Core.csproj" />

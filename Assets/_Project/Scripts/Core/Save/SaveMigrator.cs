@@ -87,7 +87,7 @@ namespace Template.Core.Save
     /// <summary>The save format history of this project. Each game edits this file as its data evolves.</summary>
     public static class SaveSchema
     {
-        public const int CurrentVersion = 2;
+        public const int CurrentVersion = 3;
 
         public static SaveMigrator CreateMigrator()
         {
@@ -100,6 +100,15 @@ namespace Template.Core.Save
                     if (data["totalRuns"] == null)
                     {
                         data["totalRuns"] = 0;
+                    }
+                })
+                // v3 persists a loss across quit/reboot; older saves have no unresolved loss.
+                .Add(2, data =>
+                {
+                    var game = data["game"] as JObject;
+                    if (game != null && game["pendingLoss"] == null)
+                    {
+                        game["pendingLoss"] = false;
                     }
                 });
         }

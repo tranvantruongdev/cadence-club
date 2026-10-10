@@ -28,10 +28,6 @@ namespace Template.Core.Save
         /// <summary>Throws on corrupt JSON or a save from a newer build; callers fall back to the backup.</summary>
         public SaveData Deserialize(string json)
         {
-            if (string.IsNullOrWhiteSpace(json))
-            {
-                return New();
-            }
 
             var obj = JObject.Parse(json);
             _migrator.Migrate(obj);

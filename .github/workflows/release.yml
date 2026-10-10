@@ -22,22 +22,80 @@ permissions:
   contents: write
 
 jobs:
-  # Skips the whole release (instead of failing) until the Unity login secrets exist.
+  # Missing signing or Unity credentials fail here instead of marking a release as skipped/green.
   check:
+    name: Release prerequisites
     runs-on: ubuntu-24.04
-    outputs:
-      licence: ${{ steps.licence.outputs.present }}
     steps:
-      - id: licence
+      - name: Require Unity and Android signing secrets
         env:
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-        run: echo "present=$([ -n "$UNITY_EMAIL" ] && [ -n "$UNITY_PASSWORD" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          ANDROID_KEYALIAS_NAME: ${{ secrets.ANDROID_KEYALIAS_NAME }}
+          ANDROID_KEYALIAS_PASS: ${{ secrets.ANDROID_KEYALIAS_PASS }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [[ -n "$UNITY_EMAIL" ]] || missing+=(UNITY_EMAIL)
+          [[ -n "$UNITY_PASSWORD" ]] || missing+=(UNITY_PASSWORD)
+          [[ -n "$ANDROID_KEYSTORE_BASE64" ]] || missing+=(ANDROID_KEYSTORE_BASE64)
+          [[ -n "$ANDROID_KEYSTORE_PASS" ]] || missing+=(ANDROID_KEYSTORE_PASS)
+          [[ -n "$ANDROID_KEYALIAS_NAME" ]] || missing+=(ANDROID_KEYALIAS_NAME)
+          [[ -n "$ANDROID_KEYALIAS_PASS" ]] || missing+=(ANDROID_KEYALIAS_PASS)
+          if (( ${#missing[@]} > 0 )); then
+            printf '::error::Missing required release secrets: %s\n' "${missing[*]}"
+            exit 1
+          fi
+
+  core-tests:
+    name: Core logic (.NET)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: Template core
+        run: dotnet test Tools/CoreTests/Template.Core.Tests.csproj --nologo
+      - name: Cadence Club rules
+        run: dotnet test Tools/GameTests/CadenceClub.Core.Tests.csproj --nologo
+
+  unity-tests:
+    name: Unity PlayMode + EditMode
+    needs: check
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/cache@v6
+        with:
+          path: Library
+          key: Library-release-test-${{ hashFiles('Packages/packages-lock.json') }}
+          restore-keys: Library-release-test-
+      - uses: game-ci/unity-test-runner@v4
+        id: unity-tests
+        env:
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          testMode: all
+          coverageEnabled: false
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          checkName: Release Unity tests
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: release-unity-test-results
+          path: ${{ steps.unity-tests.outputs.artifactsPath }}
+          if-no-files-found: warn
 
   build:
     name: Build ${{ matrix.name }}
-    needs: check
-    if: needs.check.outputs.licence == 'true'
+    needs: [check, core-tests, unity-tests]
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false

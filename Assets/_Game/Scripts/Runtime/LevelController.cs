@@ -41,7 +41,9 @@ namespace CadenceClub
         private Bot _hintBot;
         private float _idle;
         private bool _busy;
-        private bool _lifeOwed;
+        private bool _paused;
+        private bool _backPending;
+        private bool _homePending;
         private bool _firstSession;
         private bool _nextGoesHome;
         private List<BoosterDef> _boosters;
@@ -69,12 +71,12 @@ namespace CadenceClub
             _hintBot = new Bot(BotKind.Greedy, new SeededRandom(1)); // hints the move a careful player would make
             _boosters = Club.PendingBoosters.Select(id => Club.Master.Boosters.FirstOrDefault(b => b.id == id)).Where(b => b != null).ToList();
             Club.PendingBoosters.Clear(); // bought for this level's first try only
-            AppLifecycle.BackPressed += GoHome;
+            AppLifecycle.BackPressed += OnBack;
             Play(Levels.Override ?? Levels.Next(Club.Data.level));
             ClubAudio.Music(ClubAudio.LevelMusic);
         }
 
-        private void OnDestroy() => AppLifecycle.BackPressed -= GoHome;
+        private void OnDestroy() => AppLifecycle.BackPressed -= OnBack;
 
         /// <summary>Loads a level and builds its HUD and board from scratch (shapes differ between levels).</summary>
         private void Play(int number)
@@ -96,7 +98,8 @@ namespace CadenceClub
             _hud.RetryPressed += Retry;
             _hud.NextPressed += NextLevel;
             _hud.ContinuePressed += ContinueLevel;
-            _hud.HomePressed += GoHome;
+            _hud.ResumePressed += Resume;
+            _hud.HomePressed += RequestHome;
             _hud.PowerPressed += slot => UsePower(slot).Forget();
             Restart();
         }
@@ -143,7 +146,7 @@ namespace CadenceClub
 
             _state.Continue(md.Int("extra_moves"));
             ClubAudio.Play(ClubAudio.Coin);
-            _lifeOwed = false;
+            Club.Data.ClearPendingLoss();
             Club.Save();
             _hud.HideEnd();
             _hud.Refresh(_state);
@@ -153,14 +156,7 @@ namespace CadenceClub
         /// <summary>A lost level costs a life once the player leaves it (Try again, Home) without buying more moves.</summary>
         private void PayLostLife()
         {
-            if (!_lifeOwed)
-            {
-                return;
-            }
-
-            _lifeOwed = false;
-            Club.Data.SpendLife(Club.Master, Club.Now);
-            Club.Save();
+            Club.ResolvePendingLoss();
         }
 
         /// <summary>Pays out a win (coins, the first-win ★, the scripted free rider) or charges a life for a loss, and saves.</summary>
@@ -186,8 +182,8 @@ namespace CadenceClub
             }
             else
             {
-                // ponytail: quitting the app on this card keeps the life; charge it at loss time if that matters.
-                _lifeOwed = true;
+                // Persist the loss now so a quit or process stop cannot skip its life charge.
+                club.MarkPendingLoss();
                 line = Loc.F("Keep going for {0} coins, or leaving costs a life.", md.Int("extra_moves_cost"));
             }
 
@@ -197,6 +193,10 @@ namespace CadenceClub
 
         private void Restart()
         {
+            _paused = false;
+            _backPending = false;
+            _homePending = false;
+            _hud.ShowPause(false);
             var md = Club.Master;
             var squad = Club.Data.Squad(md).Where(o => md.Rider(o.id) != null).Select(o => new RiderSlot(md.Rider(o.id), o.level));
             // The first session plays each level's designed board (level 2 opens on a rocket, level 3 on a bomb).
@@ -215,7 +215,6 @@ namespace CadenceClub
             _hud.HideEnd();
             _hud.Refresh(_state);
             _idle = 0f;
-            _busy = false;
         }
 
         private void OnEnable() => RenderPipelineManager.beginCameraRendering += FitBeforeRender;
@@ -241,7 +240,7 @@ namespace CadenceClub
 
         private void Update()
         {
-            if (_busy || _state == null || _state.Outcome != LevelOutcome.Playing)
+            if (_busy || _paused || _state == null || _state.Outcome != LevelOutcome.Playing)
             {
                 return;
             }
@@ -299,46 +298,59 @@ namespace CadenceClub
         /// <summary>Plays one move: resolves it in Core, then lets the view replay it.</summary>
         public async UniTaskVoid PlayMove(Cell a, Cell b)
         {
-            if (_busy || !MoveFinder.CanSwap(_state.Board, a, b))
+            if (_busy || _paused || _state == null || _state.Outcome != LevelOutcome.Playing
+                || !MoveFinder.CanSwap(_state.Board, a, b))
             {
                 return;
             }
 
             _busy = true;
-            if (!MoveFinder.IsValid(_state.Board, a, b))
+            try
             {
-                // No match: the pieces spring back with a soft buzz, and no move is used.
-                _audio.PlaySfx(_buzz, 0.5f, 1f);
-                Haptics.Light();
-                await _board.Bounce(a, b);
-                _busy = false;
-                return;
+                if (!MoveFinder.IsValid(_state.Board, a, b))
+                {
+                    // No match: the pieces spring back with a soft buzz, and no move is used.
+                    _audio.PlaySfx(_buzz, 0.5f, 1f);
+                    Haptics.Light();
+                    await _board.Bounce(a, b);
+                    return;
+                }
+
+                var events = new List<BoardEvent>();
+                _state.TryMove(a, b, events);
+                await _board.Play(events, _state.Board, OnStep);
+                await VictoryLap();
+                Finish();
             }
-
-            var events = new List<BoardEvent>();
-            _state.TryMove(a, b, events);
-            await _board.Play(events, _state.Board, OnStep);
-            await VictoryLap();
-            Finish();
+            finally
+            {
+                EndBusy();
+            }
         }
-
         /// <summary>Fires a full rider's power (a portrait tap): no move used, and the view replays it like a move.</summary>
         public async UniTaskVoid UsePower(int slot)
         {
             var events = new List<BoardEvent>();
-            if (_busy || !_state.TryUsePower(slot, events))
+            if (_busy || _paused || _state == null || _state.Outcome != LevelOutcome.Playing
+                || !_state.TryUsePower(slot, events))
             {
                 return;
             }
 
             _busy = true;
-            Haptics.Medium();
-            ClubAudio.Play(ClubAudio.Power);
-            await _board.Play(events, _state.Board, OnStep);
-            await VictoryLap();
-            Finish();
+            try
+            {
+                Haptics.Medium();
+                ClubAudio.Play(ClubAudio.Power);
+                await _board.Play(events, _state.Board, OnStep);
+                await VictoryLap();
+                Finish();
+            }
+            finally
+            {
+                EndBusy();
+            }
         }
-
         /// <summary>A win's moves left go off as rockets before the end card (skipped with Reduce Motion).</summary>
         private async UniTask VictoryLap()
         {
@@ -375,7 +387,6 @@ namespace CadenceClub
             }
 
             _idle = 0f;
-            _busy = false;
         }
 
         private void OnStep(int step, List<BoardEvent> events, int from, int to)
@@ -399,6 +410,91 @@ namespace CadenceClub
             {
                 ClubAudio.Play(ClubAudio.Blast, 0.6f); // once a step, however many specials go off
             }
+        }
+
+        private void OnBack()
+        {
+            if (_paused)
+            {
+                Resume();
+                return;
+            }
+
+            if (_busy)
+            {
+                _backPending = true;
+                return;
+            }
+
+            if (_state != null && _state.Outcome == LevelOutcome.Playing)
+            {
+                Pause();
+            }
+            else
+            {
+                GoHome();
+            }
+        }
+
+        private void Pause()
+        {
+            if (_paused || _state == null || _state.Outcome != LevelOutcome.Playing)
+            {
+                return;
+            }
+
+            _paused = true;
+            _pressing = false;
+            _board.StopHint();
+            _hud.ShowPause(true);
+        }
+
+        private void Resume()
+        {
+            if (!_paused)
+            {
+                return;
+            }
+
+            _paused = false;
+            _hud.ShowPause(false);
+            _idle = 0f;
+        }
+
+        private void EndBusy()
+        {
+            _busy = false;
+            if (_homePending)
+            {
+                _homePending = false;
+                _backPending = false;
+                GoHome();
+                return;
+            }
+
+            if (_backPending)
+            {
+                _backPending = false;
+                if (_state != null && _state.Outcome == LevelOutcome.Playing)
+                {
+                    Pause();
+                }
+                else
+                {
+                    GoHome();
+                }
+            }
+        }
+
+        private void RequestHome()
+        {
+            if (_busy)
+            {
+                _homePending = true;
+                return;
+            }
+
+            GoHome();
         }
 
         private void GoHome()

@@ -13,6 +13,7 @@
 "Keep going for {0} coins, or leaving costs a life.","Chơi tiếp với {0} xu, hoặc rời đi sẽ mất một mạng.","{0}コインで続行。やめるとライフが1つ減ります。"
 "+{0} moves","+{0} lượt","+{0}手"
 "Continue","Tiếp tục","続ける"
+"Paused","Tạm dừng","一時停止"
 "Next level","Màn tiếp","次のレベル"
 "LEVEL {0}","MÀN {0}","レベル {0}"
 "MOVES","LƯỢT","残り手数"

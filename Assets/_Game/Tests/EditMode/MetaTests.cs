@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
 using Template.Core.Random;
+using Template.Core.Save;
 
 namespace CadenceClub.Core.Tests
 {
@@ -144,6 +145,48 @@ namespace CadenceClub.Core.Tests
 
             Assert.AreEqual(5, save.Owned("r1").level);
             Assert.AreEqual(1000 - 25 - 50 - 100, save.Owned("r1").shards);
+        }
+
+        [Test]
+        public void Pending_loss_round_trips_and_charges_once()
+        {
+            var md = Md();
+            var club = new ClubSave();
+            club.StartIfNew(md);
+            club.Lives(md, T0);
+
+            Assert.IsTrue(club.MarkPendingLoss());
+            Assert.IsFalse(club.MarkPendingLoss(), "recording the same unresolved loss is idempotent");
+
+            var codec = new SaveCodec(SaveSchema.CreateMigrator());
+            var envelope = SaveCodec.New();
+            envelope.SetGame(club);
+            var reloaded = codec.Deserialize(codec.Serialize(envelope)).GetGame<ClubSave>();
+            Assert.IsTrue(reloaded.pendingLoss, "the loss survives loading the save");
+
+            Assert.IsTrue(reloaded.ResolvePendingLoss(md, T0));
+            Assert.AreEqual(4, reloaded.Lives(md, T0));
+            var afterCharge = SaveCodec.New();
+            afterCharge.SetGame(reloaded);
+            var secondReload = codec.Deserialize(codec.Serialize(afterCharge)).GetGame<ClubSave>();
+            Assert.IsFalse(secondReload.ResolvePendingLoss(md, T0), "a saved resolution cannot charge again");
+            Assert.AreEqual(4, secondReload.Lives(md, T0));
+        }
+
+        [Test]
+        public void Continue_clears_pending_loss_without_charging_a_life()
+        {
+            var md = Md();
+            var club = new ClubSave { coins = md.Int("extra_moves_cost") };
+            club.StartIfNew(md);
+            club.Lives(md, T0);
+            club.MarkPendingLoss();
+
+            Assert.IsTrue(club.TryBuyContinue(md));
+            club.ClearPendingLoss();
+
+            Assert.IsFalse(club.pendingLoss);
+            Assert.AreEqual(5, club.Lives(md, T0));
         }
 
         [Test]

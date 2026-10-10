@@ -57,9 +57,29 @@ namespace CadenceClub
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void OpenNewPlayersInALevel()
         {
-            GameBootstrap.FirstState = () => Data.InFirstSession(Master) ? AppState.Game : AppState.Title;
+            GameBootstrap.FirstState = ResolveBootState;
             UiFactory.Localize = Loc.T; // the template's own labels (Settings) in the player's language
             SettingsPanelView.Languages = new[] { ("en", "English"), ("vi", "Tiếng Việt"), ("ja", "日本語") };
+        }
+
+        /// <summary>Resolves a saved loss before choosing the first scene after boot.</summary>
+        public static AppState ResolveBootState()
+        {
+            ResolvePendingLoss();
+            return Data.InFirstSession(Master) ? AppState.Game : AppState.Title;
+        }
+
+        /// <summary>Resolves a loss left on disk by quitting or stopping during the result card.</summary>
+        public static bool ResolvePendingLoss()
+        {
+            var data = Data;
+            if (!data.ResolvePendingLoss(Master, Now))
+            {
+                return false;
+            }
+
+            Save();
+            return true;
         }
 
         public static void Save()
