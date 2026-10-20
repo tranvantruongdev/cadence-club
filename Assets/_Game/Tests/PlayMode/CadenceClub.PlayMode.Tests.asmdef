@@ -6,6 +6,7 @@
         "CadenceClub.Runtime",
         "Template.Core",
         "Template.Runtime",
+        "Unity.InputSystem",
         "UniTask",
         "UnityEngine.TestRunner",
         "UnityEngine.UI",
