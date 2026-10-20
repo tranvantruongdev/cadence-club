@@ -100,6 +100,7 @@ namespace CadenceClub
             _hud.ContinuePressed += ContinueLevel;
             _hud.ResumePressed += Resume;
             _hud.HomePressed += RequestHome;
+            _hud.MenuPressed += OnMenu;
             _hud.PowerPressed += slot => UsePower(slot).Forget();
             Restart();
         }
@@ -446,7 +447,7 @@ namespace CadenceClub
             _paused = true;
             _pressing = false;
             _board.StopHint();
-            _hud.ShowPause(true);
+            _hud.ShowPause(true, LeavingCostsALife);
         }
 
         private void Resume()
@@ -497,8 +498,28 @@ namespace CadenceClub
             GoHome();
         }
 
+        /// <summary>Leaving a level after its first move costs a life, like losing it (Trường, 2026-10-20).</summary>
+        private bool LeavingCostsALife => _state != null && _state.Outcome == LevelOutcome.Playing && _state.MovesUsed > 0;
+
+        /// <summary>The corner Home icon: once leaving costs a life, it opens the pause card (which says so) instead.</summary>
+        private void OnMenu()
+        {
+            if (LeavingCostsALife)
+            {
+                OnBack(); // pauses now, or as soon as the current move finishes
+                return;
+            }
+
+            RequestHome();
+        }
+
         private void GoHome()
         {
+            if (LeavingCostsALife)
+            {
+                Club.Data.MarkPendingLoss(); // charged below like a loss: once, saved before the scene changes
+            }
+
             PayLostLife();
             Services.Get<GameFlow>().GoToAsync(AppState.Title).Forget();
         }

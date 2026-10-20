@@ -327,6 +327,35 @@ namespace CadenceClub.PlayModeTests
                     Assert.AreEqual(0, drifts, $"{name}: the board view should match the Core board after every move");
                 }
 
+                // Leaving a level under way costs a life (Trường, 2026-10-20). Before the first move the corner Home icon
+                // goes straight Home for free; after it, the icon opens the pause card with the warning, and that card's
+                // Home charges exactly one life. Earlier losses are settled and lives filled first, so only this counts.
+                Club.ResolvePendingLoss();
+                club.lives = md.Int("lives_max");
+                Levels.Override = 4;
+                yield return EnterGame();
+                Tap("Button Menu");
+                yield return WaitForScene("Title", 20f);
+                yield return new WaitForSeconds(0.6f); // GameFlow ignores requests mid-fade
+                Assert.AreEqual(md.Int("lives_max"), club.Lives(md, Club.Now), "leaving before the first move is free");
+
+                yield return EnterGame();
+                controller = Object.FindAnyObjectByType<LevelController>();
+                var opening = new Bot(BotKind.Greedy, new SeededRandom(3)).Choose(State(controller)).Value;
+                controller.PlayMove(opening.a, opening.b);
+                yield return null;
+                yield return WaitIdle(controller);
+                Assert.AreEqual((LevelOutcome.Playing, 1), (State(controller).Outcome, State(controller).MovesUsed));
+                Tap("Button Menu");
+                yield return null;
+                Assert.IsNotNull(GameObject.Find("Pause note"), "after a move the icon pauses and warns that leaving costs a life");
+                Capture("leave-warning");
+                Tap("Button Home");
+                yield return WaitForScene("Title", 20f);
+                yield return new WaitForSeconds(0.6f);
+                Assert.AreEqual(md.Int("lives_max") - 1, club.Lives(md, Club.Now), "leaving after a move costs exactly one life");
+                Assert.IsFalse(club.pendingLoss, "the charge is settled, not left pending");
+
                 yield return Services.Get<GameFlow>().GoToAsync(AppState.Title).ToCoroutine(); // the whole transition: GameFlow ignores requests mid-fade
                 yield return WaitForScene("Title", 20f);
                 yield return new WaitForSeconds(0.6f);
@@ -515,6 +544,15 @@ namespace CadenceClub.PlayModeTests
             var eventSystem = UnityEngine.EventSystems.EventSystem.current;
             UnityEngine.EventSystems.ExecuteEvents.Execute(portrait, new UnityEngine.EventSystems.PointerEventData(eventSystem),
                 UnityEngine.EventSystems.ExecuteEvents.pointerClickHandler);
+        }
+
+        /// <summary>Taps the active UI button with this name, like a player would.</summary>
+        private static void Tap(string name)
+        {
+            var button = Object.FindObjectsByType<UnityEngine.UI.Button>(FindObjectsSortMode.None)
+                .FirstOrDefault(b => b.name == name && b.gameObject.activeInHierarchy);
+            Assert.IsNotNull(button, $"{name} is on screen");
+            button.onClick.Invoke();
         }
 
         private static IEnumerator EnterGame()

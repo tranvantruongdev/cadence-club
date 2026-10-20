@@ -14,7 +14,7 @@ namespace CadenceClub.PlayModeTests
             {
                 var font = UiTheme.Current.Font(fontStyle);
                 Assert.That(font, Is.Not.Null);
-                foreach (var key in new[] { "Paused", "Continue", "Home" })
+                foreach (var key in new[] { "Paused", "Continue", "Home", "Leaving now costs a life." })
                 {
                     string translated = Club.Master.Translate(key, language);
                     bool covered = font.HasCharacters(translated, out uint[] missing, searchFallbacks: true, tryAddCharacter: false);

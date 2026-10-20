@@ -30,6 +30,7 @@ namespace CadenceClub.UI
         private GameObject _retry;
         private GameObject _home;
         private GameObject _pause;
+        private TextMeshProUGUI _pauseNote;
         private int _shownMoves = -1;
         private RectTransform _safe;
         private readonly List<Portrait> _portraits = new List<Portrait>();
@@ -40,6 +41,9 @@ namespace CadenceClub.UI
         public event Action ContinuePressed;
         public event Action ResumePressed;
         public event Action HomePressed;
+
+        /// <summary>The Home icon in the corner (not the cards' Home buttons): the controller decides whether it pauses first.</summary>
+        public event Action MenuPressed;
 
         /// <summary>A squad portrait was tapped (slot index).</summary>
         public event Action<int> PowerPressed;
@@ -95,7 +99,8 @@ namespace CadenceClub.UI
             _moves = UiFactory.CreateText(bar, "", 110, new Vector2(370f, -12f), new Vector2(240f, 140f), TextAlignmentOptions.Center, UiFont.Display);
             _moves.color = theme.ink;
 
-            var home = UiFactory.CreateIconButton(safe, theme.iconHome, Vector2.zero, 96f, () => HomePressed?.Invoke(), ButtonStyle.Glass, "<");
+            var home = UiFactory.CreateIconButton(safe, theme.iconHome, Vector2.zero, 96f, () => MenuPressed?.Invoke(), ButtonStyle.Glass, "<");
+            home.gameObject.name = "Button Menu";
             UiFactory.Place(home, new Vector2(0f, 0f), new Vector2(92f, 92f));
 
             BuildEndCard(theme);
@@ -107,13 +112,16 @@ namespace CadenceClub.UI
             var overlay = UiFactory.CreateOverlay(transform);
             overlay.name = "Pause";
             _pause = overlay.gameObject;
-            var card = UiFactory.CreateCard(overlay.rectTransform, Vector2.zero, new Vector2(860f, 560f));
-            var title = UiFactory.CreateText(card, Loc.T("Paused"), 88, new Vector2(0f, 170f), new Vector2(780f, 120f),
+            var card = UiFactory.CreateCard(overlay.rectTransform, Vector2.zero, new Vector2(860f, 640f));
+            var title = UiFactory.CreateText(card, Loc.T("Paused"), 88, new Vector2(0f, 210f), new Vector2(780f, 120f),
                 TextAlignmentOptions.Center, UiFont.Display);
             title.color = theme.ink;
-            UiFactory.CreateButton(card, Loc.T("Continue"), new Vector2(0f, 10f), new Vector2(680f, 140f),
+            _pauseNote = UiFactory.CreateText(card, Loc.T("Leaving now costs a life."), 40, new Vector2(0f, 115f), new Vector2(780f, 60f));
+            _pauseNote.color = theme.muted;
+            _pauseNote.gameObject.name = "Pause note";
+            UiFactory.CreateButton(card, Loc.T("Continue"), new Vector2(0f, -10f), new Vector2(680f, 140f),
                 () => ResumePressed?.Invoke(), ButtonStyle.Primary, theme.iconPlay);
-            UiFactory.CreateButton(card, Loc.T("Home"), new Vector2(0f, -170f), new Vector2(680f, 120f),
+            UiFactory.CreateButton(card, Loc.T("Home"), new Vector2(0f, -190f), new Vector2(680f, 120f),
                 () => HomePressed?.Invoke(), ButtonStyle.Secondary, theme.iconHome);
             _pause.SetActive(false);
         }
@@ -230,7 +238,12 @@ namespace CadenceClub.UI
 
         public void HideEnd() => _end.SetActive(false);
 
-        public void ShowPause(bool visible) => _pause.SetActive(visible);
+        /// <param name="leavingCostsALife">Shows the warning line: a move was made, so Home now costs a life.</param>
+        public void ShowPause(bool visible, bool leavingCostsALife = false)
+        {
+            _pause.SetActive(visible);
+            _pauseNote.gameObject.SetActive(leavingCostsALife);
+        }
 
         /// <summary>
         /// Rider portraits along the bottom (the thumb zone): a charge ring in the rider's colour fills as their pieces
