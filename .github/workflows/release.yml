@@ -158,7 +158,8 @@ jobs:
       - name: Package release files
         run: |
           set -euo pipefail
-          name="${{ github.event.repository.name }}-${{ github.ref_name }}"
+          # A dry run on a branch like feat/x would put "/" in the file name; tags (v1.2.3) stay as they are.
+          name="${{ github.event.repository.name }}-${GITHUB_REF_NAME//\//-}"
           mkdir -p release
           cp dist/android-apk/*.apk "release/${name}.apk"
           cp dist/android-aab/*.aab "release/${name}.aab"
