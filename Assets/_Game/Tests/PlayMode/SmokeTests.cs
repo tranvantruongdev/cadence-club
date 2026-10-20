@@ -289,8 +289,9 @@ namespace CadenceClub.PlayModeTests
                 yield return new WaitForSeconds(0.4f);
                 Capture("obstacles-rider-full");
                 int movesBefore = State(controller).MovesLeft;
-                controller.UsePower(1);
+                TapPortrait(batu.Def.name);
                 yield return null;
+                Assert.IsFalse(batu.Full, "a tap on the full portrait fires the power");
                 yield return WaitIdle(controller);
                 Assert.AreEqual(movesBefore, State(controller).MovesLeft, "a power uses no move");
                 Assert.AreEqual(0, drifts, "the board view should match the Core board after a power");
@@ -498,6 +499,22 @@ namespace CadenceClub.PlayModeTests
                 Assert.Less(t, 10f, "a move or power should finish animating within 10 s");
                 yield return null;
             }
+        }
+
+        /// <summary>
+        /// A player's tap on a rider portrait. The test used to call UsePower directly, which hid that no graphic in the
+        /// portrait took taps (UiFactory images default to raycastTarget = false), so a real tap fell through. A screen
+        /// raycast can't be used here: in batch runs the safe area comes from the desktop, not the 640×480 test screen,
+        /// so the HUD lies off-screen.
+        /// </summary>
+        private static void TapPortrait(string riderName)
+        {
+            var portrait = GameObject.Find("Rider " + riderName);
+            Assert.IsTrue(portrait.GetComponentsInChildren<UnityEngine.UI.Graphic>().Any(g => g.raycastTarget),
+                "something in the portrait takes taps, or a real tap falls through it");
+            var eventSystem = UnityEngine.EventSystems.EventSystem.current;
+            UnityEngine.EventSystems.ExecuteEvents.Execute(portrait, new UnityEngine.EventSystems.PointerEventData(eventSystem),
+                UnityEngine.EventSystems.ExecuteEvents.pointerClickHandler);
         }
 
         private static IEnumerator EnterGame()

@@ -295,6 +295,7 @@ namespace CadenceClub.UI
             UiFactory.CreateText(root, rider.rarity.ToString(), 26, new Vector2(70f, 96f), new Vector2(80f, 40f), TextAlignmentOptions.Center, UiFont.Display)
                 .color = rider.rarity == Rarity.SSR ? theme.accent : theme.textOnDark;
             var button = root.gameObject.AddComponent<Button>();
+            ring.raycastTarget = true; // UiFactory images ignore taps by default; the ring is the portrait's tap area
             button.targetGraphic = ring;
             button.onClick.AddListener(() => PowerPressed?.Invoke(slot));
             return new Portrait { root = root, ring = ring, glow = glow };
