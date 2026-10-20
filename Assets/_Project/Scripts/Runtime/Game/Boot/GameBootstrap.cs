@@ -46,6 +46,7 @@ namespace Template.Game.Boot
             settings.Apply();
             WireUiFeedback(audio);
             AppLifecycle.Create();
+            PortraitFrame.Create();
             DebugOverlay.CreateIfDevelopment();
 
             var flow = GameFlow.Create();

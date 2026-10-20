@@ -1,0 +1,23 @@
+{
+    "name": "Template.Runtime.Tests",
+    "rootNamespace": "Template.Runtime.Tests",
+    "references": [
+        "Template.Core",
+        "Template.Runtime",
+        "UnityEngine.TestRunner",
+        "UnityEngine.UI"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

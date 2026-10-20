@@ -34,8 +34,10 @@ namespace Template.UI
                 return;
             }
 
-            var min = area.position;
-            var max = area.position + area.size;
+            // A wide desktop window keeps the UI in the portrait column (PortraitFrame); on phones the column is the screen.
+            var column = PortraitFrame.Column;
+            var min = new Vector2(Mathf.Max(area.xMin, column.xMin), area.yMin);
+            var max = new Vector2(Mathf.Min(area.xMax, column.xMax), area.yMax);
             min.x /= Screen.width;
             min.y /= Screen.height;
             max.x /= Screen.width;

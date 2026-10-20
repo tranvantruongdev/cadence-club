@@ -53,7 +53,7 @@ namespace Template.UI
 
         public static Canvas CreateCanvas(string name, int sortingOrder = 0)
         {
-            var go = new GameObject(name, typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            var go = new GameObject(name, typeof(RectTransform), typeof(Canvas), typeof(ColumnCanvasScaler), typeof(GraphicRaycaster));
             var canvas = go.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.sortingOrder = sortingOrder;
