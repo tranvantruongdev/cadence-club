@@ -33,7 +33,7 @@ namespace Template.Runtime.Tests
         public IEnumerator Frame_on_keeps_camera_ui_and_scale_in_the_column()
         {
             PortraitFrame.Enabled = true;
-            var (camera, canvas, safe) = Build();
+            var (camera, canvas, safe, frame) = Build();
             yield return null;
             yield return null;
 
@@ -49,30 +49,49 @@ namespace Template.Runtime.Tests
 
             float expected = Mathf.Pow(2f, Mathf.Lerp(Mathf.Log(width / 1080f, 2f), Mathf.Log(Screen.height / 1920f, 2f), 0.5f));
             Assert.That(canvas.scaleFactor, Is.EqualTo(expected).Within(1e-3f), "canvas scale from the column");
+
+            // Bars sit on a canvas above the fade (1000) and every popup, so a full-screen dim can't tint them.
+            Assert.That(frame.GetComponent<Canvas>().sortingOrder, Is.GreaterThan(1000), "bars above all UI");
+            var left = (RectTransform)frame.transform.GetChild(0);
+            var right = (RectTransform)frame.transform.GetChild(1);
+            bool wide = width < Screen.width;
+            Assert.AreEqual(wide, left.gameObject.activeSelf, "left bar shown only when the screen is wider than the column");
+            Assert.AreEqual(wide, right.gameObject.activeSelf, "right bar shown only when the screen is wider than the column");
+            if (wide)
+            {
+                left.GetWorldCorners(corners);
+                Assert.That(corners[0].x, Is.EqualTo(0f).Within(1f), "left bar from the screen edge");
+                Assert.That(corners[2].x, Is.EqualTo(x).Within(1f), "left bar to the column");
+                right.GetWorldCorners(corners);
+                Assert.That(corners[0].x, Is.EqualTo(x + width).Within(1f), "right bar from the column");
+                Assert.That(corners[2].x, Is.EqualTo(Screen.width).Within(1f), "right bar to the screen edge");
+            }
         }
 
         [UnityTest]
         public IEnumerator Frame_off_leaves_the_whole_screen()
         {
             PortraitFrame.Enabled = false;
-            var (camera, _, safe) = Build();
+            var (camera, _, safe, frame) = Build();
             yield return null;
             yield return null;
 
             Assert.AreEqual(new Rect(0f, 0f, 1f, 1f), camera.rect);
+            Assert.IsFalse(frame.transform.GetChild(0).gameObject.activeSelf, "no left bar");
+            Assert.IsFalse(frame.transform.GetChild(1).gameObject.activeSelf, "no right bar");
             var corners = new Vector3[4];
             safe.GetWorldCorners(corners);
             Assert.That(corners[2].x - corners[0].x, Is.EqualTo(Screen.safeArea.width).Within(1f));
         }
 
-        private (Camera, Canvas, RectTransform) Build()
+        private (Camera, Canvas, RectTransform, PortraitFrame) Build()
         {
             var camera = new GameObject("Test Camera").AddComponent<Camera>();
             var frame = PortraitFrame.Create();
             var canvas = UiFactory.CreateCanvas("Test UI");
             var safe = UiFactory.CreateSafeArea(canvas.transform);
             _objects = new[] { camera.gameObject, frame.gameObject, canvas.gameObject };
-            return (camera, canvas, safe);
+            return (camera, canvas, safe, frame);
         }
     }
 }

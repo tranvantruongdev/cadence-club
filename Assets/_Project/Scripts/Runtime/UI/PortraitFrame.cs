@@ -6,7 +6,7 @@ namespace Template.UI
     /// <summary>
     /// Keeps a desktop window that is wider than 3:4 to a centred portrait column (<see cref="PortraitColumn"/>) with
     /// black bars at the sides. SafeArea and the canvas scaler read <see cref="Column"/>; this component fits every
-    /// camera to it.
+    /// camera to it and draws the bars on a canvas above all others, so popup dims stay inside the column too.
     /// </summary>
     public sealed class PortraitFrame : MonoBehaviour
     {
@@ -33,21 +33,26 @@ namespace Template.UI
 
         public static PortraitFrame Create()
         {
-            var go = new GameObject("[PortraitFrame]");
-            DontDestroyOnLoad(go);
-            var bars = go.AddComponent<Camera>();
-            bars.depth = -100f;
-            bars.clearFlags = CameraClearFlags.SolidColor;
-            bars.backgroundColor = Color.black;
-            bars.cullingMask = 0;
-            bars.enabled = false;
-            return go.AddComponent<PortraitFrame>();
+            var canvas = UiFactory.CreateCanvas("[PortraitFrame]", short.MaxValue);
+            DontDestroyOnLoad(canvas.gameObject);
+            var frame = canvas.gameObject.AddComponent<PortraitFrame>();
+            frame._left = Bar(canvas.transform);
+            frame._right = Bar(canvas.transform);
+            return frame;
         }
 
-        private Camera _bars;
-        private Camera[] _cameras = new Camera[4];
+        private static RectTransform Bar(Transform parent)
+        {
+            var bar = UiFactory.CreatePanel(parent, Color.black);
+            bar.raycastTarget = false;
+            bar.gameObject.SetActive(false);
+            return bar.rectTransform;
+        }
 
-        private void Awake() => _bars = GetComponent<Camera>();
+        private RectTransform _left;
+        private RectTransform _right;
+        private Rect _barsFor;
+        private Camera[] _cameras = new Camera[4];
 
         private void LateUpdate()
         {
@@ -57,8 +62,16 @@ namespace Template.UI
             }
 
             var column = Column;
-            _bars.enabled = column.width < Screen.width;
             var viewport = new Rect(column.x / Screen.width, 0f, column.width / Screen.width, 1f);
+            if (column != _barsFor)
+            {
+                _barsFor = column;
+                bool bars = column.width < Screen.width;
+                _left.gameObject.SetActive(bars);
+                _right.gameObject.SetActive(bars);
+                _left.anchorMax = new Vector2(viewport.xMin, 1f);
+                _right.anchorMin = new Vector2(viewport.xMax, 0f);
+            }
 
             if (_cameras.Length < Camera.allCamerasCount)
             {
@@ -68,7 +81,7 @@ namespace Template.UI
             int count = Camera.GetAllCameras(_cameras);
             for (int i = 0; i < count; i++)
             {
-                if (_cameras[i] != _bars && _cameras[i].rect != viewport)
+                if (_cameras[i].rect != viewport)
                 {
                     _cameras[i].rect = viewport;
                 }
