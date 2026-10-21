@@ -15,6 +15,15 @@ namespace CadenceClub.UI
     /// <summary>Goals and moves bar at the top, a home button, and the end card (won or out of moves).</summary>
     public sealed class LevelHud : MonoBehaviour
     {
+        /// <summary>Bottom edge of the goals bar, in canvas units below the safe area's top.</summary>
+        public const float GoalsBarBottom = GoalsBarY + GoalsBarHeight * 0.5f;
+
+        /// <summary>Top of a squad portrait's charge glow, in canvas units above the safe area's bottom.</summary>
+        public const float SquadTop = SquadY + 20f + 110f;
+
+        private const float GoalsBarY = 200f;
+        private const float GoalsBarHeight = 230f;
+        private const float SquadY = 210f;
         private static readonly Color Done = new Color(0.35f, 0.82f, 0.45f);
 
         private TextMeshProUGUI _moves;
@@ -71,8 +80,8 @@ namespace CadenceClub.UI
             var safe = _safe = UiFactory.CreateSafeArea(transform);
 
             var bar = UiFactory.CreateRect("Goals bar", safe);
-            bar.sizeDelta = new Vector2(1000f, 230f);
-            UiFactory.Place(bar, new Vector2(0.5f, 1f), new Vector2(0f, -200f));
+            bar.sizeDelta = new Vector2(1000f, GoalsBarHeight);
+            UiFactory.Place(bar, new Vector2(0.5f, 1f), new Vector2(0f, -GoalsBarY));
             UiFactory.AddShadow(bar, Vector2.zero, bar.sizeDelta, 40, 0.3f, 10f);
             UiFactory.CreateRounded(bar, Vector2.zero, bar.sizeDelta, theme.paper, 40);
 
@@ -292,7 +301,7 @@ namespace CadenceClub.UI
             var colour = PieceArt.Colors[Mathf.Clamp(rider.color, 0, PieceArt.Colors.Length - 1)];
             var root = UiFactory.CreateRect($"Rider {rider.name}", _safe);
             root.sizeDelta = new Vector2(200f, 250f);
-            UiFactory.Place(root, new Vector2(0.5f, 0f), new Vector2((slot - (count - 1) * 0.5f) * 250f, 210f));
+            UiFactory.Place(root, new Vector2(0.5f, 0f), new Vector2((slot - (count - 1) * 0.5f) * 250f, SquadY));
             var glow = UiFactory.CreateImage(root, PieceArt.Disc, new Vector2(0f, 20f), new Vector2(220f, 220f), WithAlpha(colour, 0f));
             UiFactory.CreateImage(root, PieceArt.Disc, new Vector2(0f, 20f), new Vector2(180f, 180f), new Color(0.04f, 0.07f, 0.12f, 0.92f));
             var ring = UiFactory.CreateImage(root, PieceArt.Ring, new Vector2(0f, 20f), new Vector2(180f, 180f), colour);

@@ -25,6 +25,8 @@ namespace CadenceClub
     /// </summary>
     public sealed class LevelController : MonoBehaviour
     {
+        /// <summary>The camera sits this far above the board's centre, leaving more room above it for the goals bar.</summary>
+        public const float CameraY = 0.6f;
         private const float SwipeThreshold = 0.35f;
         private const float HintDelay = 5f;
         private const float FirstSessionHintDelay = 1.5f;
@@ -206,7 +208,7 @@ namespace CadenceClub
             if (_board == null)
             {
                 _board = BoardView.Create(_state.Board);
-                _camera.transform.position = new Vector3(0f, 0.6f, -10f); // zoom follows the aspect in FitBeforeRender
+                _camera.transform.position = new Vector3(0f, CameraY, -10f); // zoom follows the aspect in FitBeforeRender
             }
             else
             {
@@ -233,10 +235,21 @@ namespace CadenceClub
                 return;
             }
 
-            var size = _board.Bounds.size;
-            float aspect = Mathf.Max(0.1f, camera.aspect);
-            // Leave room above the board for the goals bar and below it for breathing space.
-            camera.orthographicSize = Mathf.Max(size.y * 0.5f + 2.4f, (size.x * 0.5f + 0.5f) / aspect);
+            camera.orthographicSize = FitSize(_board.Bounds.size, camera.aspect);
+        }
+
+        /// <summary>
+        /// Half-height of the view that fits a board of this size: room above it for the goals bar, breathing space
+        /// below, and the bottom row clear of the squad portraits, which sit a fixed canvas height up from the bottom.
+        /// On 3:4 (tablets, the desktop column) the board fits by height, and that last term keeps it off the portraits.
+        /// </summary>
+        public static float FitSize(Vector2 board, float aspect)
+        {
+            aspect = Mathf.Max(0.1f, aspect);
+            // Canvas height in reference units for this shape (UiFactory: ScaleWithScreenSize 1080x1920, match 0.5).
+            float canvasHeight = Mathf.Sqrt(1080f * 1920f / aspect);
+            float clearSquad = (board.y * 0.5f + CameraY) / (1f - 2f * LevelHud.SquadTop / canvasHeight);
+            return Mathf.Max(board.y * 0.5f + 2.4f, (board.x * 0.5f + 0.5f) / aspect, clearSquad);
         }
 
         private void Update()
